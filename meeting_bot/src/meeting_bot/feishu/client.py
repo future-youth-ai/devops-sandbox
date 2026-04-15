@@ -40,7 +40,9 @@ class FeishuClient:
         self._token: str | None = None
         self._token_expires_at: float = 0.0
         self._token_lock = asyncio.Lock()
-        self._http = httpx.AsyncClient(
+        # Bandit B113 误报: httpx.Timeout(...) 对象本身就是超时配置,
+        # 30s 总超时 + 10s 连接超时, 只是 Bandit 不认识这种写法。
+        self._http = httpx.AsyncClient(  # nosec B113
             base_url=FEISHU_BASE,
             timeout=httpx.Timeout(30.0, connect=10.0),
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
