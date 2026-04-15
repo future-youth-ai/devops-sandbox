@@ -128,7 +128,6 @@ jobs:
             pip-audit --desc || echo "::warning::pip-audit warnings"
           fi
       - name: TruffleHog
-        working-directory: .
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./ai_review

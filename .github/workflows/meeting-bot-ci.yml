@@ -114,7 +114,6 @@ jobs:
       - run: pip install "pip-audit==2.7.3"
       - run: pip-audit --desc || echo "::warning::pip-audit warnings"
       - name: TruffleHog
-        working-directory: .
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./meeting_bot
