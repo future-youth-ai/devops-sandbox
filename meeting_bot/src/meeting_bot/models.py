@@ -25,9 +25,7 @@ class ActionItem(BaseModel):
 
     title: str = Field(..., description="任务标题, 展示在飞书任务列表")
     description: str = Field("", description="任务详情")
-    owner_open_id: str | None = Field(
-        default=None, description="负责人 open_id (从参会人解析)"
-    )
+    owner_open_id: str | None = Field(default=None, description="负责人 open_id (从参会人解析)")
     owner_name: str = Field("", description="负责人展示名")
     due_time: datetime | None = Field(default=None, description="截止时间")
     source_meeting_id: str = Field(..., description="来源会议 ID, 用于追溯")

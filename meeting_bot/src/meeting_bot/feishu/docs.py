@@ -56,9 +56,7 @@ class DocsAPI:
             page_token = body.get("page_token")
         return all_blocks
 
-    async def append_text_block(
-        self, document_id: str, parent_block_id: str, text: str
-    ) -> None:
+    async def append_text_block(self, document_id: str, parent_block_id: str, text: str) -> None:
         """在指定 block 下追加一段文本。"""
         await self.client.patch(
             f"/docx/v1/documents/{document_id}/blocks/{parent_block_id}/children",

@@ -24,9 +24,7 @@ class Settings(BaseSettings):
     feishu_app_secret: SecretStr = Field(..., description="飞书自建应用 App Secret")
 
     # ---------- 事件订阅 ----------
-    feishu_event_encrypt_key: SecretStr = Field(
-        ..., description="事件订阅加密 Key (AES-256)"
-    )
+    feishu_event_encrypt_key: SecretStr = Field(..., description="事件订阅加密 Key (AES-256)")
     feishu_event_verification_token: SecretStr | None = Field(
         default=None, description="旧版 Verification Token (V2 可留空)"
     )
@@ -55,4 +53,4 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """进程内缓存, 避免反复读 .env。"""
-    return Settings()  # type: ignore[call-arg]
+    return Settings()

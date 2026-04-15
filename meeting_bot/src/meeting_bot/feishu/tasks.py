@@ -43,8 +43,7 @@ class TaskAPI:
             body["reminders"] = [{"relative_fire_minute": reminder_offset_minutes}]
         if assignee_open_ids:
             body["members"] = [
-                {"id": oid, "type": "user", "role": "assignee"}
-                for oid in assignee_open_ids
+                {"id": oid, "type": "user", "role": "assignee"} for oid in assignee_open_ids
             ]
 
         data = await self.client.post("/task/v2/tasks", json=body)

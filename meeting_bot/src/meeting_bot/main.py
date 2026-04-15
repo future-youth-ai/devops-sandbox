@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import Any
 
 import structlog
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request, status
@@ -90,7 +91,7 @@ async def healthz() -> dict[str, Any]:
 
 # ---------- webhook ----------
 @app.post("/webhook/feishu")
-async def feishu_webhook(  # noqa: PLR0913
+async def feishu_webhook(
     request: Request,
     background: BackgroundTasks,
     x_lark_request_timestamp: str | None = Header(default=None),
@@ -166,9 +167,7 @@ async def feishu_webhook(  # noqa: PLR0913
     )
 
 
-async def _dispatch_event(
-    pipeline: Pipeline, event_type: str, payload: dict[str, Any]
-) -> None:
+async def _dispatch_event(pipeline: Pipeline, event_type: str, payload: dict[str, Any]) -> None:
     """后台分派 - 根据事件类型调 pipeline。"""
     event = payload.get("event", {})
 

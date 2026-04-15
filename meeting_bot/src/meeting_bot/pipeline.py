@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -56,9 +56,7 @@ class Pipeline:
             enable_async=False,
         )
 
-    async def process(
-        self, meeting_id: str, minute_token: str | None = None
-    ) -> PipelineResult:
+    async def process(self, meeting_id: str, minute_token: str | None = None) -> PipelineResult:
         """主入口。按顺序: 拉数据 → 结构化 → 并发扇出。"""
         result = PipelineResult(meeting_id=meeting_id)
         log.info("pipeline_start", meeting_id=meeting_id, minute_token=minute_token)
@@ -116,9 +114,7 @@ class Pipeline:
         return result
 
     # ---------- Step 1: 收集 + 结构化 ----------
-    async def _collect(
-        self, meeting_id: str, minute_token: str | None
-    ) -> MeetingSummary:
+    async def _collect(self, meeting_id: str, minute_token: str | None) -> MeetingSummary:
         """从飞书 VC + 妙记拉数据, 生成 MeetingSummary。"""
         meeting_info = await self.vc.get_meeting(meeting_id)
         participants_raw = await self.vc.list_participants(meeting_id)
@@ -143,7 +139,6 @@ class Pipeline:
 
         # 解析妙记行动项 - 字段名以实际 API 返回为准
         raw_actions = summary_data.get("action_items", []) or []
-        name_to_email = {a.name: a.email for a in attendees if a.email}
         name_to_openid = {a.name: a.open_id for a in attendees if a.open_id}
 
         action_items: list[ActionItem] = []
@@ -276,17 +271,17 @@ class Pipeline:
 def _parse_ts(value: Any) -> datetime:
     """容错解析时间戳 (秒/毫秒/ISO 字符串)。"""
     if value is None:
-        return datetime.now(tz=timezone.utc)
+        return datetime.now(tz=UTC)
     if isinstance(value, int | float):
         ts = float(value)
         if ts > 1e12:
             ts /= 1000.0
-        return datetime.fromtimestamp(ts, tz=timezone.utc)
+        return datetime.fromtimestamp(ts, tz=UTC)
     if isinstance(value, str):
         if value.isdigit():
             return _parse_ts(int(value))
         try:
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
-            return datetime.now(tz=timezone.utc)
-    return datetime.now(tz=timezone.utc)
+            return datetime.now(tz=UTC)
+    return datetime.now(tz=UTC)

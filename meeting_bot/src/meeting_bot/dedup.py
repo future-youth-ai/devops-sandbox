@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import aiosqlite
@@ -48,6 +48,6 @@ class DedupStore:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 "INSERT OR IGNORE INTO processed_events VALUES (?, ?, ?)",
-                (event_id, event_type, datetime.utcnow().isoformat()),
+                (event_id, event_type, datetime.now(tz=UTC).isoformat()),
             )
             await db.commit()
