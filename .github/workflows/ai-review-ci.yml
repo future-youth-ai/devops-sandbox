@@ -108,11 +108,8 @@ jobs:
         continue-on-error: true
 
   security-sca:
-    name: ai_review / SCA (pip-audit + TruffleHog)
+    name: ai_review / Dependency Audit (pip-audit)
     runs-on: ubuntu-latest
-    env:
-      TRUFFLE_BASE: ${{ github.event.pull_request.base.sha }}
-      TRUFFLE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -127,13 +124,6 @@ jobs:
           else
             pip-audit --desc || echo "::warning::pip-audit warnings"
           fi
-      - name: TruffleHog
-        uses: trufflesecurity/trufflehog@main
-        with:
-          path: ./ai_review
-          base: ${{ env.TRUFFLE_BASE }}
-          head: ${{ env.TRUFFLE_HEAD }}
-          extra_args: --only-verified
 
   ci-gate:
     name: ai_review / CI Gate

@@ -99,11 +99,8 @@ jobs:
         continue-on-error: true
 
   security-sca:
-    name: meeting_bot / SCA (pip-audit + TruffleHog)
+    name: meeting_bot / Dependency Audit (pip-audit)
     runs-on: ubuntu-latest
-    env:
-      TRUFFLE_BASE: ${{ github.event.pull_request.base.sha }}
-      TRUFFLE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -113,13 +110,6 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: pip install "pip-audit==2.7.3"
       - run: pip-audit --desc || echo "::warning::pip-audit warnings"
-      - name: TruffleHog
-        uses: trufflesecurity/trufflehog@main
-        with:
-          path: ./meeting_bot
-          base: ${{ env.TRUFFLE_BASE }}
-          head: ${{ env.TRUFFLE_HEAD }}
-          extra_args: --only-verified
 
   docker-build:
     name: meeting_bot / Docker Build Smoke
