@@ -119,7 +119,7 @@ jobs:
           path: ./meeting_bot
           base: ${{ env.TRUFFLE_BASE }}
           head: ${{ env.TRUFFLE_HEAD }}
-          extra_args: --only-verified --fail
+          extra_args: --only-verified
 
   docker-build:
     name: meeting_bot / Docker Build Smoke

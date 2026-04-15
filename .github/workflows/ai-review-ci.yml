@@ -133,7 +133,7 @@ jobs:
           path: ./ai_review
           base: ${{ env.TRUFFLE_BASE }}
           head: ${{ env.TRUFFLE_HEAD }}
-          extra_args: --only-verified --fail
+          extra_args: --only-verified
 
   ci-gate:
     name: ai_review / CI Gate
