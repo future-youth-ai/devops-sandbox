@@ -1,0 +1,48 @@
+# 会议纪要：{{ summary.title }}
+
+**会议编号**：{{ summary.meeting_id }}
+**时间**：{{ summary.start_time.strftime('%Y-%m-%d %H:%M') }} — {{ summary.end_time.strftime('%H:%M') }}
+**时长**：{{ ((summary.end_time - summary.start_time).total_seconds() / 60) | round(0) | int }} 分钟
+**参会人**：{% for a in summary.attendees %}{{ a.name }}{% if not loop.last %}、{% endif %}{% endfor %}
+
+---
+
+## 摘要
+
+{{ summary.summary or "(妙记未返回整体摘要)" }}
+
+## 讨论要点
+
+{% if summary.key_points -%}
+{% for point in summary.key_points %}
+- {{ point }}
+{%- endfor %}
+{%- else -%}
+(无)
+{%- endif %}
+
+## 会议决议
+
+{% if summary.decisions -%}
+{% for d in summary.decisions %}
+{{ loop.index }}. {{ d }}
+{%- endfor %}
+{%- else -%}
+(无)
+{%- endif %}
+
+## 行动项
+
+{% if summary.action_items -%}
+| # | 任务 | 负责人 | 截止 |
+|---|------|--------|------|
+{% for item in summary.action_items -%}
+| {{ loop.index }} | {{ item.title }} | {{ item.owner_name or "未指定" }} | {{ item.due_time.strftime('%Y-%m-%d') if item.due_time else "未定" }} |
+{% endfor %}
+{%- else -%}
+(无)
+{%- endif %}
+
+---
+
+*本纪要由 Meeting Bot 自动生成于 {{ summary.end_time.strftime('%Y-%m-%d %H:%M') }}，如有疏漏请参阅[妙记原文]({{ summary.minutes_url or '#' }})。*

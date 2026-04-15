@@ -1,0 +1,20 @@
+# 默认兜底
+*                                  @jimmyhu213
+
+# 仓库基础设施 - CI / 工作流 / 仓库级脚本
+/.github/                          @jimmyhu213
+/scripts/                          @jimmyhu213
+/.coderabbit.yaml                  @jimmyhu213
+/README.md                         @jimmyhu213
+
+# ai_review 子项目
+/ai_review/                        @jimmyhu213
+# /ai_review/src/rag/              @ai-team
+# /ai_review/src/review/           @ai-team @product-team
+# /ai_review/src/parsers/          @ai-team
+# /ai_review/src/api/              @backend-team
+
+# meeting_bot 子项目
+/meeting_bot/                      @jimmyhu213
+/meeting_bot/src/meeting_bot/feishu/ @jimmyhu213
+# /meeting_bot/src/meeting_bot/    @backend-team

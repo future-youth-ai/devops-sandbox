@@ -1,0 +1,161 @@
+name: meeting_bot CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'meeting_bot/**'
+      - 'scripts/**'
+      - '.github/workflows/meeting-bot-ci.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'meeting_bot/**'
+      - 'scripts/**'
+      - '.github/workflows/meeting-bot-ci.yml'
+
+concurrency:
+  group: meeting-bot-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  security-events: write
+
+env:
+  PYTHON_VERSION: "3.11"
+
+defaults:
+  run:
+    working-directory: meeting_bot
+
+jobs:
+  lint:
+    name: meeting_bot / Lint (Ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install "ruff==0.6.9"
+      - run: ruff check --output-format=github .
+      - run: ruff format --check .
+
+  typecheck:
+    name: meeting_bot / Type Check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - run: mypy src
+
+  test:
+    name: meeting_bot / Test (pytest)
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - run: pytest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: meeting-bot-coverage
+          path: meeting_bot/coverage.xml
+          retention-days: 14
+
+  security-sast:
+    name: meeting_bot / SAST (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install "bandit[toml]==1.7.10"
+      - run: bandit -c pyproject.toml -r src -f sarif -o bandit.sarif || true
+      - run: bandit -c pyproject.toml -r src -ll
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: meeting_bot/bandit.sarif
+          category: meeting_bot-bandit
+        continue-on-error: true
+
+  security-sca:
+    name: meeting_bot / SCA (pip-audit + TruffleHog)
+    runs-on: ubuntu-latest
+    env:
+      TRUFFLE_BASE: ${{ github.event.pull_request.base.sha }}
+      TRUFFLE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install "pip-audit==2.7.3"
+      - run: pip-audit --desc || echo "::warning::pip-audit warnings"
+      - name: TruffleHog
+        working-directory: .
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./meeting_bot
+          base: ${{ env.TRUFFLE_BASE }}
+          head: ${{ env.TRUFFLE_HEAD }}
+          extra_args: --only-verified --fail
+
+  docker-build:
+    name: meeting_bot / Docker Build Smoke
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: meeting_bot
+          push: false
+          tags: meeting-bot:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  ci-gate:
+    name: meeting_bot / CI Gate
+    if: always()
+    needs: [lint, typecheck, test, security-sast, security-sca, docker-build]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          LINT: ${{ needs.lint.result }}
+          TYPECHECK: ${{ needs.typecheck.result }}
+          TEST: ${{ needs.test.result }}
+          SAST: ${{ needs.security-sast.result }}
+          SCA: ${{ needs.security-sca.result }}
+          DOCKER: ${{ needs.docker-build.result }}
+        run: |
+          echo "lint=$LINT typecheck=$TYPECHECK test=$TEST sast=$SAST sca=$SCA docker=$DOCKER"
+          if [ "$LINT" != "success" ] || [ "$TYPECHECK" != "success" ] || \
+             [ "$TEST" != "success" ] || [ "$SAST" != "success" ] || \
+             [ "$SCA" != "success" ] || [ "$DOCKER" != "success" ]; then
+            echo "::error::meeting_bot CI 未通过"
+            exit 1
+          fi
+          echo "meeting_bot CI 全部通过 ✅"

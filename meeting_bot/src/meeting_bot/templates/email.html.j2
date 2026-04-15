@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: -apple-system, "PingFang SC", Arial, sans-serif; color: #333; max-width: 640px; margin: 0 auto; padding: 24px; }
+    h1 { color: #2c5aa0; font-size: 20px; border-bottom: 2px solid #2c5aa0; padding-bottom: 8px; }
+    h2 { color: #555; font-size: 15px; margin-top: 24px; }
+    .meta { color: #777; font-size: 13px; }
+    .summary { background: #f5f7fa; padding: 12px 16px; border-left: 4px solid #2c5aa0; border-radius: 4px; }
+    ul { padding-left: 20px; }
+    .actions table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .actions th, .actions td { border: 1px solid #e0e0e0; padding: 6px 10px; text-align: left; }
+    .actions th { background: #f5f7fa; }
+    .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e0e0e0; color: #999; font-size: 12px; }
+    a { color: #2c5aa0; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h1>📋 会议纪要：{{ summary.title }}</h1>
+
+  <p class="meta">
+    🕐 {{ summary.start_time.strftime('%Y-%m-%d %H:%M') }} — {{ summary.end_time.strftime('%H:%M') }}<br>
+    👥 {% for a in summary.attendees %}{{ a.name }}{% if not loop.last %}、{% endif %}{% endfor %}
+  </p>
+
+  <h2>摘要</h2>
+  <div class="summary">{{ summary.summary or "(妙记未返回整体摘要)" }}</div>
+
+  {% if summary.decisions %}
+  <h2>会议决议</h2>
+  <ul>
+    {% for d in summary.decisions %}<li>{{ d }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if summary.action_items %}
+  <h2>行动项</h2>
+  <div class="actions">
+    <table>
+      <tr><th>#</th><th>任务</th><th>负责人</th><th>截止</th></tr>
+      {% for item in summary.action_items %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ item.title }}</td>
+        <td>{{ item.owner_name or "未指定" }}</td>
+        <td>{{ item.due_time.strftime('%Y-%m-%d') if item.due_time else "未定" }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {% if summary.minutes_url %}
+  <p style="margin-top: 24px;">
+    🔗 <a href="{{ summary.minutes_url }}">查看飞书妙记原文</a>
+  </p>
+  {% endif %}
+
+  <div class="footer">
+    本邮件由 Meeting Bot 自动生成 · 如对内容有疑问请联系会议组织者
+  </div>
+</body>
+</html>

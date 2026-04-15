@@ -1,0 +1,54 @@
+{
+  "config": {"wide_screen_mode": true},
+  "header": {
+    "template": "blue",
+    "title": {
+      "tag": "plain_text",
+      "content": "📋 会议纪要 · {{ summary.title }}"
+    }
+  },
+  "elements": [
+    {
+      "tag": "div",
+      "text": {
+        "tag": "lark_md",
+        "content": "**时间**：{{ summary.start_time.strftime('%Y-%m-%d %H:%M') }} — {{ summary.end_time.strftime('%H:%M') }}\n**参会人**：{% for a in summary.attendees %}{{ a.name }}{% if not loop.last %}、{% endif %}{% endfor %}"
+      }
+    },
+    {"tag": "hr"},
+    {
+      "tag": "div",
+      "text": {
+        "tag": "lark_md",
+        "content": "**摘要**\n{{ (summary.summary or '(妙记未返回摘要)') | replace('\n', '\\n') | replace('"', '\\"') }}"
+      }
+    }{% if summary.decisions %},
+    {"tag": "hr"},
+    {
+      "tag": "div",
+      "text": {
+        "tag": "lark_md",
+        "content": "**🎯 会议决议**\n{% for d in summary.decisions %}{{ loop.index }}. {{ d | replace('\n', ' ') | replace('"', '\\"') }}\\n{% endfor %}"
+      }
+    }{% endif %}{% if summary.action_items %},
+    {"tag": "hr"},
+    {
+      "tag": "div",
+      "text": {
+        "tag": "lark_md",
+        "content": "**✅ 行动项 ({{ summary.action_items | length }})**\n{% for item in summary.action_items %}• {{ item.title | replace('"', '\\"') }} → <at id=\"{{ item.owner_open_id or 'all' }}\">{{ item.owner_name or '未指定' }}</at>{% if item.due_time %} ({{ item.due_time.strftime('%m-%d') }}){% endif %}\\n{% endfor %}"
+      }
+    }{% endif %}{% if summary.minutes_url %},
+    {
+      "tag": "action",
+      "actions": [
+        {
+          "tag": "button",
+          "text": {"tag": "plain_text", "content": "查看妙记"},
+          "type": "primary",
+          "url": "{{ summary.minutes_url }}"
+        }
+      ]
+    }{% endif %}
+  ]
+}
