@@ -125,10 +125,25 @@ jobs:
             pip-audit --desc || echo "::warning::pip-audit warnings"
           fi
 
+  docker-build:
+    name: ai_review / Docker Build Smoke
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ai_review
+          push: false
+          tags: ai-review:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   ci-gate:
     name: ai_review / CI Gate
     if: always()
-    needs: [lint, typecheck, test, security-sast, security-sca]
+    needs: [lint, typecheck, test, security-sast, security-sca, docker-build]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -140,11 +155,12 @@ jobs:
           TEST: ${{ needs.test.result }}
           SAST: ${{ needs.security-sast.result }}
           SCA: ${{ needs.security-sca.result }}
+          DOCKER: ${{ needs.docker-build.result }}
         run: |
-          echo "lint=$LINT typecheck=$TYPECHECK test=$TEST sast=$SAST sca=$SCA"
+          echo "lint=$LINT typecheck=$TYPECHECK test=$TEST sast=$SAST sca=$SCA docker=$DOCKER"
           if [ "$LINT" != "success" ] || [ "$TYPECHECK" != "success" ] || \
              [ "$TEST" != "success" ] || [ "$SAST" != "success" ] || \
-             [ "$SCA" != "success" ]; then
+             [ "$SCA" != "success" ] || [ "$DOCKER" != "success" ]; then
             echo "::error::ai_review CI 未通过"
             exit 1
           fi
