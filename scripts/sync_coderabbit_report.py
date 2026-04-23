@@ -258,8 +258,9 @@ def main() -> int:
     resp = requests.post(webhook, json=card, timeout=TIMEOUT)
     resp.raise_for_status()
     data = resp.json()
-    # 飞书群 webhook: 成功返回 code=0 或 StatusCode=0
-    if data.get("code", 0) != 0 and data.get("StatusCode", 0) != 0:
+    # 飞书群 webhook: 成功时 code 与 StatusCode 都应为 0 (一般只返回其中之一);
+    # 任一字段非零都视为失败, 用 OR 而非 AND 避免单字段错误被吞
+    if data.get("code", 0) != 0 or data.get("StatusCode", 0) != 0:
         raise RuntimeError(f"飞书群消息发送失败: {data}")
     print(f"✅ 已推送到飞书: kind={reason}, PR #{pr_number or '?'}")
     return 0
