@@ -117,7 +117,27 @@ class Pipeline:
     async def _collect(self, meeting_id: str, minute_token: str | None) -> MeetingSummary:
         """从飞书 VC + 妙记拉数据, 生成 MeetingSummary。"""
         meeting_info = await self.vc.get_meeting(meeting_id)
-        participants_raw = await self.vc.list_participants(meeting_id)
+
+        # Feishu participant_list API 需要 meeting_no + 时间范围, 不是 meeting_id
+        # (详见 meeting_bot.feishu.vc.VCAPI.list_participants 文档)
+        meeting_no = str(meeting_info.get("meeting_no") or "")
+        start_ts = int(meeting_info.get("start_time") or 0)
+        end_ts = int(meeting_info.get("end_time") or 0)
+        if meeting_no and start_ts > 0 and end_ts > 0:
+            participants_raw = await self.vc.list_participants(
+                meeting_no=meeting_no,
+                meeting_start_time=start_ts,
+                meeting_end_time=end_ts,
+            )
+        else:
+            log.warning(
+                "participants_skipped_missing_meeting_info",
+                meeting_id=meeting_id,
+                has_meeting_no=bool(meeting_no),
+                has_start=start_ts > 0,
+                has_end=end_ts > 0,
+            )
+            participants_raw = []
 
         attendees = [
             Attendee(
@@ -133,9 +153,12 @@ class Pipeline:
         if minute_token:
             minute_data = await self.minutes.get_minute(minute_token)
             try:
-                summary_data = await self.minutes.get_summary(minute_token)
+                # Feishu OpenAPI 不直接返回 "AI 摘要"; 这里拉 /statistics,
+                # summary/key_points/decisions/action_items 字段缺失时下方
+                # .get(..., default) 会降级为空值, 不会崩溃.
+                summary_data = await self.minutes.get_statistics(minute_token)
             except Exception as e:
-                log.warning("minutes_summary_unavailable", error=str(e))
+                log.warning("minutes_statistics_unavailable", error=str(e))
 
         # 解析妙记行动项 - 字段名以实际 API 返回为准
         raw_actions = summary_data.get("action_items", []) or []
