@@ -71,7 +71,16 @@ def should_skip(event: str, sender: str, body: str, state: str) -> tuple[bool, s
 # ---------- 校验 / 转义 ----------
 
 def validate_pr_url(url: str) -> str:
-    """只允许 https://github.com/<owner>/<repo>/pull/<n> 格式, 否则返回空串."""
+    """只允许 https://github.com/<owner>/<repo>/pull/<n> 精确格式.
+
+    拒绝:
+        - 非 https / 非 github.com
+        - /pull/<n>/files 这类子路径 (必须正好 4 段)
+        - 带 query string 或 fragment
+        - pull 号非纯数字
+
+    返回规范化 URL 或空串.
+    """
     if not url:
         return ""
     try:
@@ -80,10 +89,17 @@ def validate_pr_url(url: str) -> str:
         return ""
     if p.scheme != "https" or p.netloc != "github.com":
         return ""
-    parts = [seg for seg in p.path.split("/") if seg]
-    if len(parts) < 4 or parts[2] != "pull" or not parts[3].isdigit():
+    if p.query or p.fragment:
         return ""
-    return url
+    parts = [seg for seg in p.path.split("/") if seg]
+    if (
+        len(parts) != 4
+        or parts[2] != "pull"
+        or not parts[3].isdigit()
+    ):
+        return ""
+    owner, repo, _, number = parts
+    return f"https://github.com/{owner}/{repo}/pull/{number}"
 
 
 def validate_repo(repo: str) -> str:
@@ -96,7 +112,7 @@ def validate_pr_number(number: str) -> str:
 
 
 def escape_lark_md(text: str) -> str:
-    """最小转义: 防止 pr_title 突破 markdown 链接上下文 / 触发 @ 提醒."""
+    """最小转义: 防止 pr_title 突破 markdown 链接上下文 / 触发 @ 提醒 / 注入 HTML 标签."""
     if not text:
         return ""
     return (
@@ -105,6 +121,26 @@ def escape_lark_md(text: str) -> str:
         .replace("]", "\\]")
         # 飞书 @all/@here/@<user_id> 会触发提醒, 用全角 @ (U+FF20) 替换
         .replace("@", "＠")
+        # 阻止 <b>xxx</b> 之类 HTML/lark 标签注入
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def sanitize_lark_body(text: str) -> str:
+    """对非 trusted 的长文本做 lark_md 注入最小净化.
+
+    即使 sender 已经是 coderabbitai[bot], 其 body 仍可能是转发的用户输入
+    (比如 PR 作者写在 PR body 里的 @all, 再被 bot 引用). 所以对 body 也做
+    一次基础净化: 替换 @ 防误提醒, 用 HTML 实体替换 <>, 防止潜在的 lark 标签注入.
+    Markdown 链接/粗体等格式保留, 因为 CodeRabbit 的输出靠它渲染可读性.
+    """
+    if not text:
+        return ""
+    return (
+        text.replace("@", "＠")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
     )
 
 
@@ -154,7 +190,13 @@ def build_card(
     elements: list[dict] = [
         {"tag": "div", "text": {"tag": "lark_md", "content": f"**PR**: {link_md}"}},
         {"tag": "hr"},
-        {"tag": "div", "text": {"tag": "lark_md", "content": truncate_bytes(body)}},
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": truncate_bytes(sanitize_lark_body(body)),
+            },
+        },
     ]
     if pr_url:
         elements.append(
