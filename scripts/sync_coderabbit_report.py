@@ -25,9 +25,13 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import os
 import re
 import sys
+import time
 from urllib.parse import urlparse
 
 import requests
@@ -255,7 +259,16 @@ def main() -> int:
 
     card = build_card(reason, repo, pr_number, pr_title, pr_url, body)
 
-    resp = requests.post(webhook, json=card, timeout=TIMEOUT)
+    # 如果配了 FEISHU_WEBHOOK_SECRET, 开启签名校验模式 (飞书自定义机器人的 "签名校验")
+    # 否则走 "IP 白名单 / 关键词" 模式, 不带签名字段
+    webhook_secret = os.environ.get("FEISHU_WEBHOOK_SECRET")
+    payload: dict = dict(card)
+    if webhook_secret:
+        timestamp = str(int(time.time()))
+        payload["timestamp"] = timestamp
+        payload["sign"] = _sign(timestamp, webhook_secret)
+
+    resp = requests.post(webhook, json=payload, timeout=TIMEOUT)
     resp.raise_for_status()
     data = resp.json()
     # 飞书群 webhook: 成功时 code 与 StatusCode 都应为 0 (一般只返回其中之一);
@@ -264,6 +277,16 @@ def main() -> int:
         raise RuntimeError(f"飞书群消息发送失败: {data}")
     print(f"✅ 已推送到飞书: kind={reason}, PR #{pr_number or '?'}")
     return 0
+
+
+def _sign(timestamp: str, secret: str) -> str:
+    """飞书自定义机器人签名: HMAC-SHA256(secret, f'{timestamp}\\n{secret}') 再 base64.
+
+    参考: https://open.feishu.cn/document/client-docs/bot-v1/add-custom-bot
+    """
+    string_to_sign = f"{timestamp}\n{secret}"
+    hmac_code = hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
+    return base64.b64encode(hmac_code).decode("utf-8")
 
 
 if __name__ == "__main__":
