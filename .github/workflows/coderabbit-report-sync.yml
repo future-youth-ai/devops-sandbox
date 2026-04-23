@@ -22,9 +22,14 @@ jobs:
   sync:
     name: Sync CodeRabbit report to Feishu
     runs-on: ubuntu-latest
-    # 第一道过滤: 只处理 coderabbitai[bot] 产生的事件
+    # 第一道过滤:
+    #   1) sender 是 coderabbitai[bot]
+    #   2) issue_comment 必须是 PR 下的评论 (issue.pull_request 不为 null),
+    #      避免 bot 在普通 Issue 下的评论被误同步为 PR 通知
     # 第二道过滤在 Python 脚本内 (summary / review state)
-    if: github.event.sender.login == 'coderabbitai[bot]'
+    if: >
+      github.event.sender.login == 'coderabbitai[bot]' &&
+      (github.event_name != 'issue_comment' || github.event.issue.pull_request != null)
     env:
       FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
       EVENT_NAME: ${{ github.event_name }}

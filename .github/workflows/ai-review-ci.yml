@@ -2,13 +2,13 @@ name: ai_review CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, dev]
     paths:
       - 'ai_review/**'
       - 'scripts/**'
       - '.github/workflows/ai-review-ci.yml'
   pull_request:
-    branches: [main, develop]
+    branches: [main, dev]
     paths:
       - 'ai_review/**'
       - 'scripts/**'

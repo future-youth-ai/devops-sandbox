@@ -7,6 +7,12 @@
   1. Summary 评论         (issue_comment, body 含 "Summary by CodeRabbit")
   2. Review 结论          (pull_request_review, state ∈ {changes_requested, approved})
 
+安全设计:
+  - 所有外部输入在进入飞书卡片前做结构/白名单校验
+  - pr_title 做 lark_md 转义, 避免 markdown/mention 注入
+  - body 按 UTF-8 字节数截断 (非字符数), 避免中文/emoji 超限被飞书拒收
+  - pr_url 校验必须是 github.com 下的 /pull/<n> 路径
+
 环境变量:
   FEISHU_WEBHOOK_URL        (必需, 飞书群机器人 webhook)
   EVENT_NAME                (issue_comment | pull_request_review)
@@ -22,52 +28,148 @@ from __future__ import annotations
 import os
 import re
 import sys
+from urllib.parse import urlparse
 
 import requests
 
 TIMEOUT = 15
 CODERABBIT_BOT = "coderabbitai[bot]"
-MAX_BODY_LEN = 1500  # 飞书卡片单元素建议不超过 2KB, 留余量
+
+# 飞书 lark_md 元素建议 <= 4KB, 取 3000 字节保守余量
+MAX_BODY_BYTES = 3000
+TRUNCATE_SUFFIX = "\n\n...(已截断, 完整内容见 PR)"
+
+# 已知事件 / review state 白名单
+ALLOWED_EVENTS = {"issue_comment", "pull_request_review"}
+PUSH_REVIEW_STATES = {"changes_requested", "approved"}
 
 SUMMARY_PATTERN = re.compile(r"Summary by CodeRabbit", re.IGNORECASE)
+REPO_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+PR_NUMBER_PATTERN = re.compile(r"^\d+$")
 
+
+# ---------- 过滤 ----------
 
 def should_skip(event: str, sender: str, body: str, state: str) -> tuple[bool, str]:
-    """返回 (是否跳过, 原因)."""
+    """返回 (是否跳过, 原因或匹配类型)."""
+    if event not in ALLOWED_EVENTS:
+        return True, f"未支持的事件类型: {event}"
     if sender != CODERABBIT_BOT:
         return True, f"非 CodeRabbit 事件 (sender={sender})"
 
     if event == "issue_comment":
-        # 只推 Summary 评论
         if not SUMMARY_PATTERN.search(body or ""):
             return True, "非 Summary 评论 (可能是 walkthrough/ack/进度)"
         return False, "summary"
 
-    if event == "pull_request_review":
-        # 只推有结论的 review
-        if state not in {"changes_requested", "approved"}:
-            return True, f"review state={state} 不推送"
-        return False, f"review-{state}"
-
-    return True, f"未支持的事件类型: {event}"
+    # pull_request_review
+    if state not in PUSH_REVIEW_STATES:
+        return True, f"review state={state} 不推送"
+    return False, f"review-{state}"
 
 
-def truncate(body: str, limit: int = MAX_BODY_LEN) -> str:
+# ---------- 校验 / 转义 ----------
+
+def validate_pr_url(url: str) -> str:
+    """只允许 https://github.com/<owner>/<repo>/pull/<n> 格式, 否则返回空串."""
+    if not url:
+        return ""
+    try:
+        p = urlparse(url)
+    except Exception:
+        return ""
+    if p.scheme != "https" or p.netloc != "github.com":
+        return ""
+    parts = [seg for seg in p.path.split("/") if seg]
+    if len(parts) < 4 or parts[2] != "pull" or not parts[3].isdigit():
+        return ""
+    return url
+
+
+def validate_repo(repo: str) -> str:
+    """repo 必须形如 owner/repo, 否则返回空串."""
+    return repo if repo and REPO_PATTERN.match(repo) else ""
+
+
+def validate_pr_number(number: str) -> str:
+    return number if number and PR_NUMBER_PATTERN.match(number) else ""
+
+
+def escape_lark_md(text: str) -> str:
+    """最小转义: 防止 pr_title 突破 markdown 链接上下文 / 触发 @ 提醒."""
+    if not text:
+        return ""
+    return (
+        text.replace("\\", "\\\\")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+        # 飞书 @all/@here/@<user_id> 会触发提醒, 用全角 @ (U+FF20) 替换
+        .replace("@", "＠")
+    )
+
+
+def truncate_bytes(body: str, limit: int = MAX_BODY_BYTES) -> str:
+    """按 UTF-8 字节数截断, 保证不切断多字节字符."""
     if not body:
         return "(无内容)"
-    if len(body) <= limit:
+    encoded = body.encode("utf-8")
+    if len(encoded) <= limit:
         return body
-    return body[:limit] + "\n\n...(已截断, 完整内容见 PR)"
+    # 预留 suffix 的字节
+    suffix_bytes = TRUNCATE_SUFFIX.encode("utf-8")
+    budget = max(limit - len(suffix_bytes), 0)
+    truncated = encoded[:budget]
+    # 回退直到能解码 (避免切在多字节字符中间)
+    for _ in range(4):  # UTF-8 字符最长 4 字节
+        try:
+            return truncated.decode("utf-8") + TRUNCATE_SUFFIX
+        except UnicodeDecodeError:
+            truncated = truncated[:-1]
+    return "(内容截断失败)"
 
 
-def build_card(kind: str, repo: str, pr_number: str, pr_title: str, pr_url: str, body: str) -> dict:
-    """构造飞书交互式卡片."""
+# ---------- 卡片 ----------
+
+def build_card(
+    kind: str,
+    repo: str,
+    pr_number: str,
+    pr_title: str,
+    pr_url: str,
+    body: str,
+) -> dict:
+    """构造飞书交互式卡片 (所有外部输入已校验/转义)."""
     title_map = {
         "summary": ("📝", "CodeRabbit 审查摘要", "blue"),
         "review-approved": ("✅", "CodeRabbit 审查通过", "green"),
         "review-changes_requested": ("❌", "CodeRabbit 要求修改", "red"),
     }
     emoji, title, color = title_map.get(kind, ("🐰", f"CodeRabbit [{kind}]", "grey"))
+
+    safe_title = escape_lark_md(pr_title) or "(无标题)"
+    # 链接文本中如果 pr_url 校验失败, 降级为纯文本标题
+    link_md = f"[{safe_title}]({pr_url})" if pr_url else safe_title
+    header_suffix = f"{repo}#{pr_number}" if repo and pr_number else "PR"
+
+    elements: list[dict] = [
+        {"tag": "div", "text": {"tag": "lark_md", "content": f"**PR**: {link_md}"}},
+        {"tag": "hr"},
+        {"tag": "div", "text": {"tag": "lark_md", "content": truncate_bytes(body)}},
+    ]
+    if pr_url:
+        elements.append(
+            {
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "查看 PR"},
+                        "url": pr_url,
+                        "type": "primary",
+                    }
+                ],
+            }
+        )
 
     return {
         "msg_type": "interactive",
@@ -77,34 +179,15 @@ def build_card(kind: str, repo: str, pr_number: str, pr_title: str, pr_url: str,
                 "template": color,
                 "title": {
                     "tag": "plain_text",
-                    "content": f"{emoji} {title} · {repo}#{pr_number}",
+                    "content": f"{emoji} {title} · {header_suffix}",
                 },
             },
-            "elements": [
-                {
-                    "tag": "div",
-                    "text": {"tag": "lark_md", "content": f"**PR**: [{pr_title}]({pr_url})"},
-                },
-                {"tag": "hr"},
-                {
-                    "tag": "div",
-                    "text": {"tag": "lark_md", "content": truncate(body)},
-                },
-                {
-                    "tag": "action",
-                    "actions": [
-                        {
-                            "tag": "button",
-                            "text": {"tag": "plain_text", "content": "查看 PR"},
-                            "url": pr_url,
-                            "type": "primary",
-                        }
-                    ],
-                },
-            ],
+            "elements": elements,
         },
     }
 
+
+# ---------- 主流程 ----------
 
 def main() -> int:
     event = os.environ.get("EVENT_NAME", "")
@@ -122,10 +205,11 @@ def main() -> int:
         print("::warning::缺少 FEISHU_WEBHOOK_URL, 跳过推送")
         return 0
 
-    repo = os.environ.get("REPO_NAME", "")
-    pr_number = os.environ.get("PR_NUMBER", "")
-    pr_title = os.environ.get("PR_TITLE", "")
-    pr_url = os.environ.get("PR_URL", "")
+    # 所有外部输入 -> 校验白名单 / 转义
+    repo = validate_repo(os.environ.get("REPO_NAME", ""))
+    pr_number = validate_pr_number(os.environ.get("PR_NUMBER", ""))
+    pr_url = validate_pr_url(os.environ.get("PR_URL", ""))
+    pr_title = os.environ.get("PR_TITLE", "") or ""
 
     card = build_card(reason, repo, pr_number, pr_title, pr_url, body)
 
@@ -135,7 +219,7 @@ def main() -> int:
     # 飞书群 webhook: 成功返回 code=0 或 StatusCode=0
     if data.get("code", 0) != 0 and data.get("StatusCode", 0) != 0:
         raise RuntimeError(f"飞书群消息发送失败: {data}")
-    print(f"✅ 已推送到飞书: kind={reason}, PR #{pr_number}")
+    print(f"✅ 已推送到飞书: kind={reason}, PR #{pr_number or '?'}")
     return 0
 
 
@@ -143,12 +227,12 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except requests.HTTPError as e:
-        body = ""
+        err_body = ""
         try:
-            body = e.response.text  # type: ignore[union-attr]
+            err_body = e.response.text  # type: ignore[union-attr]
         except Exception:
             pass
-        print(f"::error::HTTP 错误: {e}\n{body}", file=sys.stderr)
+        print(f"::error::HTTP 错误: {e}\n{err_body}", file=sys.stderr)
         raise SystemExit(1)
     except Exception as e:
         print(f"::error::CodeRabbit 同步脚本异常: {e}", file=sys.stderr)
