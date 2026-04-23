@@ -64,6 +64,16 @@ class VCAPI:
             raise ValueError(
                 "list_participants: meeting_start_time / meeting_end_time 必须为正 Unix 时间戳"
             )
+        if meeting_end_time < meeting_start_time:
+            raise ValueError(
+                "list_participants: meeting_end_time 必须 >= meeting_start_time "
+                f"(got start={meeting_start_time}, end={meeting_end_time})"
+            )
+        if page_size <= 0:
+            raise ValueError(f"list_participants: page_size 必须 > 0, got {page_size}")
+
+        # 飞书上限为 100, 同时做下限 1 防止 0 或负数透传
+        effective_page_size = min(max(page_size, 1), 100)
 
         all_participants: list[dict[str, Any]] = []
         page_token: str | None = None
@@ -72,7 +82,7 @@ class VCAPI:
                 "meeting_no": meeting_no,
                 "meeting_start_time": meeting_start_time,
                 "meeting_end_time": meeting_end_time,
-                "page_size": min(page_size, 100),
+                "page_size": effective_page_size,
             }
             if page_token:
                 params["page_token"] = page_token

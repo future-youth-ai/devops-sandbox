@@ -121,6 +121,11 @@ async def test_list_participants_paginates(client: FeishuClient) -> None:
     assert [p["participant_name"] for p in parts] == ["Alice", "Bob"]
     assert call_count["n"] == 2
 
+    # 第二次请求必须带上 page_token=pt-2
+    second_req = respx.calls[-1].request
+    qs2 = dict(httpx.QueryParams(second_req.url.query.decode()))
+    assert qs2["page_token"] == "pt-2"
+
 
 @pytest.mark.asyncio
 async def test_list_participants_rejects_bad_inputs(client: FeishuClient) -> None:
@@ -128,8 +133,18 @@ async def test_list_participants_rejects_bad_inputs(client: FeishuClient) -> Non
     with pytest.raises(ValueError, match="meeting_no"):
         await vc.list_participants(meeting_no="", meeting_start_time=1, meeting_end_time=2)
     with pytest.raises(ValueError, match="meeting_start_time"):
+        await vc.list_participants(meeting_no="123", meeting_start_time=0, meeting_end_time=1)
+    # 时间窗倒挂
+    with pytest.raises(ValueError, match="meeting_end_time 必须 >="):
+        await vc.list_participants(meeting_no="123", meeting_start_time=1000, meeting_end_time=500)
+    # page_size 非正
+    with pytest.raises(ValueError, match="page_size"):
         await vc.list_participants(
-            meeting_no="123", meeting_start_time=0, meeting_end_time=1
+            meeting_no="123", meeting_start_time=1, meeting_end_time=2, page_size=0
+        )
+    with pytest.raises(ValueError, match="page_size"):
+        await vc.list_participants(
+            meeting_no="123", meeting_start_time=1, meeting_end_time=2, page_size=-5
         )
 
 
@@ -142,18 +157,14 @@ async def test_minutes_get_transcript(client: FeishuClient) -> None:
     respx.post("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal").mock(
         return_value=_tenant_token_response()
     )
-    route = respx.get(
-        "https://open.feishu.cn/open-apis/minutes/v1/minutes/mtk123/transcript"
-    ).mock(
+    route = respx.get("https://open.feishu.cn/open-apis/minutes/v1/minutes/mtk123/transcript").mock(
         return_value=httpx.Response(
             200,
             json={
                 "code": 0,
                 "msg": "ok",
                 "data": {
-                    "transcripts": [
-                        {"speaker": "Alice", "start": 0, "end": 5, "text": "hello"}
-                    ]
+                    "transcripts": [{"speaker": "Alice", "start": 0, "end": 5, "text": "hello"}]
                 },
             },
         )
@@ -171,9 +182,7 @@ async def test_minutes_get_statistics(client: FeishuClient) -> None:
     respx.post("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal").mock(
         return_value=_tenant_token_response()
     )
-    route = respx.get(
-        "https://open.feishu.cn/open-apis/minutes/v1/minutes/mtk123/statistics"
-    ).mock(
+    route = respx.get("https://open.feishu.cn/open-apis/minutes/v1/minutes/mtk123/statistics").mock(
         return_value=httpx.Response(
             200,
             json={
