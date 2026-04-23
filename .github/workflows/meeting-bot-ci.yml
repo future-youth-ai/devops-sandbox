@@ -2,13 +2,13 @@ name: meeting_bot CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, dev]
     paths:
       - 'meeting_bot/**'
       - 'scripts/**'
       - '.github/workflows/meeting-bot-ci.yml'
   pull_request:
-    branches: [main, develop]
+    branches: [main, dev]
     paths:
       - 'meeting_bot/**'
       - 'scripts/**'
