@@ -111,12 +111,10 @@ def test_main_rejects_non_numeric_issue(tmp_path, monkeypatch) -> None:
 
 def test_main_handles_dirty_tasks_json(tmp_path, monkeypatch) -> None:
     """tasks.json 里如果某 issue 的值不是 list, 或 list 内有非 dict, 不能崩."""
-    import json as _json
-
     tasks_json, meetings_dir = _patch_paths(tmp_path, monkeypatch)
     tasks_json.parent.mkdir(parents=True)
     tasks_json.write_text(
-        _json.dumps(
+        json.dumps(
             {
                 "issue#1": "not a list",  # 错: 应该是 list
                 "issue#2": [

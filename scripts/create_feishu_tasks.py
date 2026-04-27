@@ -23,6 +23,8 @@ from pathlib import Path
 
 import requests
 from pydantic import BaseModel, Field, ValidationError
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from feishu_content import FEISHU_BASE, get_tenant_token
 
@@ -32,11 +34,33 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 TASKS_JSON_PATH = _REPO_ROOT / ".planning" / "tasks.json"
 
 
-class ActionItemInput(BaseModel):
-    """对 ACTION_ITEMS_JSON 的 schema 校验, 防上游格式异常."""
+def _build_session() -> requests.Session:
+    """带重试的 requests session: 飞书 5xx / 429 / 502 / 503 / 504 自动重试."""
+    s = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=0.5,  # 0.5s, 1s, 2s
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["POST", "GET"],
+        raise_on_status=False,
+    )
+    s.mount("https://", HTTPAdapter(max_retries=retries))
+    return s
 
-    title: str = Field(default="未命名", min_length=1, max_length=200)
-    description: str = Field(default="", max_length=2000)
+
+_SESSION = _build_session()
+
+
+class ActionItemInput(BaseModel):
+    """对 ACTION_ITEMS_JSON 的 schema 校验, 防上游格式异常.
+
+    长度限制对齐 extract_action_items.py 的 ActionItem schema:
+    - title: max 100 (上游 prompt 要求 ≤30 字, 留余量)
+    - description: max 500
+    """
+
+    title: str = Field(default="未命名", min_length=1, max_length=100)
+    description: str = Field(default="", max_length=500)
     assignee_name: str = ""
     due_date: str | None = None
 
@@ -66,7 +90,7 @@ def create_task(
             {"id": oid, "type": "user", "role": "assignee"}
             for oid in assignee_open_ids
         ]
-    r = requests.post(
+    r = _SESSION.post(
         f"{FEISHU_BASE}/task/v2/tasks",
         headers={"Authorization": f"Bearer {tenant_token}"},
         json=body,

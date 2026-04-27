@@ -48,8 +48,23 @@ TEMPLATE = """# {title}
 
 
 def _md_escape(s: str) -> str:
-    """简单转义 markdown 表格里的 `|`."""
-    return s.replace("|", "\\|").replace("\n", " ")
+    """转义 markdown 表格单元格里的危险字符:
+    - `|` 会破坏表格列分隔
+    - 换行会破坏表格行
+    - `` ` `` 会开 inline code
+    - `*` / `_` 会触发斜体/粗体
+    - `<` / `>` 可能触发 HTML 解析
+    """
+    return (
+        s.replace("\\", "\\\\")
+        .replace("|", "\\|")
+        .replace("\n", " ")
+        .replace("`", "\\`")
+        .replace("*", "\\*")
+        .replace("_", "\\_")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
 
 
 def build_table(items: list[dict]) -> str:
