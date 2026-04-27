@@ -17,14 +17,25 @@ from __future__ import annotations
 import json
 import os
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+from pydantic import BaseModel, Field, ValidationError
 
 from feishu_content import FEISHU_BASE, get_tenant_token
 
 TASKS_JSON_PATH = ".planning/tasks.json"
+
+
+class ActionItemInput(BaseModel):
+    """对 ACTION_ITEMS_JSON 的 schema 校验, 防上游格式异常."""
+
+    title: str = Field(default="未命名", min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    assignee_name: str = ""
+    due_date: str | None = None
 
 
 def create_task(
@@ -38,12 +49,11 @@ def create_task(
     body: dict = {"summary": title, "description": description}
     if due_date:
         try:
-            ts_ms = int(
-                datetime.fromisoformat(due_date)
-                .replace(tzinfo=timezone.utc)
-                .timestamp()
-                * 1000
-            )
+            dt = datetime.fromisoformat(due_date)
+            # 只在原本无 tz 时按 UTC 处理; 有 tz 则保留, 避免覆盖原时区
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            ts_ms = int(dt.timestamp() * 1000)
             body["due"] = {"timestamp": str(ts_ms), "is_all_day": True}
         except ValueError:
             # 日期格式不合法就忽略, 不让一条 item 失败拖累整批
@@ -87,12 +97,25 @@ def save_tasks_map(mapping: dict) -> None:
 def main() -> int:
     items_raw = os.environ.get("ACTION_ITEMS_JSON", "[]")
     try:
-        items = json.loads(items_raw)
+        raw_items = json.loads(items_raw)
     except json.JSONDecodeError as e:
         print(f"::error::ACTION_ITEMS_JSON 解析失败: {e}", file=sys.stderr)
         return 2
-    if not isinstance(items, list) or not items:
+    if not isinstance(raw_items, list) or not raw_items:
         print("ℹ️ 没有 action items, 跳过任务创建")
+        return 0
+
+    # 用 pydantic 校验每条 item, 不合法的过滤
+    items: list[dict] = []
+    for ri in raw_items:
+        if not isinstance(ri, dict):
+            continue
+        try:
+            items.append(ActionItemInput(**ri).model_dump())
+        except ValidationError as e:
+            print(f"::warning::跳过格式不对的 item: {ri} ({e})", file=sys.stderr)
+    if not items:
+        print("ℹ️ 没有合法 action items, 跳过任务创建")
         return 0
 
     app_id = os.environ.get("FEISHU_APP_ID", "")
@@ -149,10 +172,12 @@ def main() -> int:
             f"{c['due_date'] or '无截止'}): `{c['guid']}`"
             for c in created
         ) or "_(无)_"
+        # 用 UUID 当 heredoc 分隔符, 避免内容里偶遇 EOF 标记导致 GITHUB_OUTPUT 解析错乱
+        delim = f"TASK_MD_{uuid.uuid4().hex}"
         with open(gh_out, "a") as f:
             f.write(f"task_count={len(created)}\n")
             f.write(f"guids={guids}\n")
-            f.write(f"task_md<<TASK_MD_EOF\n{md_lines}\nTASK_MD_EOF\n")
+            f.write(f"task_md<<{delim}\n{md_lines}\n{delim}\n")
     return 0
 
 

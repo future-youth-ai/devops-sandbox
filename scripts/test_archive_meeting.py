@@ -82,3 +82,50 @@ def test_main_no_tasks_json(tmp_path, monkeypatch) -> None:
     out = tmp_path / ".planning/meetings/2026-04-23-issue1.md"
     assert out.exists()
     assert "未提取到" in out.read_text(encoding="utf-8")
+
+
+def test_main_rejects_path_traversal_in_date(tmp_path, monkeypatch) -> None:
+    """MEETING_DATE 含 ../ 等穿越片段必须被拒."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("MEETING_DATE", "../../etc/passwd")
+    monkeypatch.setenv("ISSUE_NUMBER", "1")
+    assert archive_meeting.main() == 2
+
+
+def test_main_rejects_non_numeric_issue(tmp_path, monkeypatch) -> None:
+    """ISSUE_NUMBER 必须纯数字."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("MEETING_DATE", "2026-04-23")
+    monkeypatch.setenv("ISSUE_NUMBER", "../../99")
+    assert archive_meeting.main() == 2
+
+
+def test_main_handles_dirty_tasks_json(tmp_path, monkeypatch) -> None:
+    """tasks.json 里如果某 issue 的值不是 list, 或 list 内有非 dict, 不能崩."""
+    import json as _json
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".planning").mkdir()
+    (tmp_path / ".planning/tasks.json").write_text(
+        _json.dumps(
+            {
+                "issue#1": "not a list",  # 错: 应该是 list
+                "issue#2": [
+                    {"title": "ok", "guid": "g1", "assignee_name": "x", "due_date": None},
+                    "not a dict",  # 错: list 内有非 dict
+                ],
+            }
+        )
+    )
+    monkeypatch.setenv("MEETING_DATE", "2026-04-23")
+    monkeypatch.setenv("ISSUE_NUMBER", "2")
+
+    rc = archive_meeting.main()
+    assert rc == 0
+
+    out = tmp_path / ".planning/meetings/2026-04-23-issue2.md"
+    assert out.exists()
+    text = out.read_text(encoding="utf-8")
+    # 只有合法的 dict 入了表格
+    assert "| 1 | ok | x" in text
+    assert "not a dict" not in text

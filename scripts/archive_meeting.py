@@ -18,9 +18,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+# 路径安全: ISSUE_NUMBER 必须纯数字, MEETING_DATE 必须 YYYY-MM-DD
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+ISSUE_NUM_RE = re.compile(r"^\d+$")
 
 TEMPLATE = """# {title}
 
@@ -64,18 +69,39 @@ def main() -> int:
     date = os.environ.get("MEETING_DATE", "").strip()
     if not date:
         date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    issue_num = os.environ.get("ISSUE_NUMBER", "?")
+
+    # 路径安全校验: 阻断 ../ 等穿越
+    if not DATE_RE.fullmatch(date):
+        print(
+            f"::error::MEETING_DATE 格式必须是 YYYY-MM-DD (got {date!r})",
+            file=sys.stderr,
+        )
+        return 2
+
+    issue_num = os.environ.get("ISSUE_NUMBER", "").strip()
+    if not ISSUE_NUM_RE.fullmatch(issue_num):
+        print(
+            f"::error::ISSUE_NUMBER 必须为纯数字 (got {issue_num!r})",
+            file=sys.stderr,
+        )
+        return 2
+
     feishu_url = os.environ.get("FEISHU_URL", "").strip() or "(未提供)"
 
-    # 从 tasks.json 取本次的 created 条目
+    # 从 tasks.json 取本次的 created 条目, 做类型兜底
     tasks_path = Path(".planning/tasks.json")
     items: list[dict] = []
     if tasks_path.exists():
         try:
             mapping = json.loads(tasks_path.read_text(encoding="utf-8"))
-            items = mapping.get(f"issue#{issue_num}", [])
         except json.JSONDecodeError:
             print("::warning::tasks.json 解析失败, 归档表格留空", file=sys.stderr)
+            mapping = {}
+        if isinstance(mapping, dict):
+            raw_items = mapping.get(f"issue#{issue_num}", [])
+            if isinstance(raw_items, list):
+                # 只保留 dict 项, 防脏数据让 build_table 崩
+                items = [it for it in raw_items if isinstance(it, dict)]
 
     md = TEMPLATE.format(
         title=title,

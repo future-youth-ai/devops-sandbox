@@ -21,7 +21,12 @@ concurrency:
 
 jobs:
   process:
-    if: contains(github.event.issue.labels.*.name, 'meeting')
+    # 幂等保护: 只在以下情况跑, 防止任意 labeled 事件重复建任务
+    #   1. issue opened 且自带 meeting label (Issue Form 提交场景)
+    #   2. labeled 动作明确加的就是 meeting label (人工补 label 场景)
+    if: >
+      (github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'meeting')) ||
+      (github.event.action == 'labeled' && github.event.label.name == 'meeting')
     runs-on: ubuntu-latest
     env:
       ISSUE_NUMBER: ${{ github.event.issue.number }}
