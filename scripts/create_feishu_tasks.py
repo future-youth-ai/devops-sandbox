@@ -26,7 +26,10 @@ from pydantic import BaseModel, Field, ValidationError
 
 from feishu_content import FEISHU_BASE, get_tenant_token
 
-TASKS_JSON_PATH = ".planning/tasks.json"
+# 锚定仓库根目录, 不依赖 cwd
+# (workflow 里 working-directory 是 scripts/, 但 .planning/ 必须落在 repo root)
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+TASKS_JSON_PATH = _REPO_ROOT / ".planning" / "tasks.json"
 
 
 class ActionItemInput(BaseModel):
@@ -77,18 +80,38 @@ def create_task(
 
 
 def load_tasks_map() -> dict:
-    """读 .planning/tasks.json (不存在则返回空 dict)."""
-    p = Path(TASKS_JSON_PATH)
-    if not p.exists():
+    """读 .planning/tasks.json, 不存在或脏数据则返回空 dict.
+
+    类型兜底: 顶层不是 dict / value 不是 list / list 内含非 dict 都不让脚本崩.
+    """
+    if not TASKS_JSON_PATH.exists():
         return {}
-    return json.loads(p.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+    try:
+        data = json.loads(TASKS_JSON_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        print(
+            f"::warning::tasks.json 解析失败, 视作空 mapping: {e}",
+            file=sys.stderr,
+        )
+        return {}
+    if not isinstance(data, dict):
+        print(
+            f"::warning::tasks.json 顶层不是 dict (got {type(data).__name__}), 视作空",
+            file=sys.stderr,
+        )
+        return {}
+    # 清洗每个 key 的 value: 必须是 list 且元素必须是 dict
+    cleaned: dict = {}
+    for k, v in data.items():
+        if isinstance(v, list):
+            cleaned[k] = [it for it in v if isinstance(it, dict)]
+    return cleaned
 
 
 def save_tasks_map(mapping: dict) -> None:
     """落盘 .planning/tasks.json (sorted, indent=2 便于 diff)."""
-    p = Path(TASKS_JSON_PATH)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(
+    TASKS_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    TASKS_JSON_PATH.write_text(
         json.dumps(mapping, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
     )

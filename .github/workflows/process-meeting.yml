@@ -87,17 +87,33 @@ jobs:
           archive_path=$(python scripts/archive_meeting.py)
           echo "archive_path=$archive_path" >> "$GITHUB_OUTPUT"
 
-      - name: Commit archive to dev
+      - name: Commit archive to dev (并发安全 + fail-closed)
         run: |
+          set -euo pipefail
           git config user.name "meeting-bot"
           git config user.email "meeting-bot@users.noreply.github.com"
           git add .planning/
           if git diff --cached --quiet; then
             echo "ℹ️ 没有归档变更, 跳过 commit"
-          else
-            git commit -m "docs(meeting): 归档 issue #${ISSUE_NUMBER}"
-            git push origin HEAD:dev
+            exit 0
           fi
+          git commit -m "docs(meeting): 归档 issue #${ISSUE_NUMBER}"
+
+          # 防并发: 多个 meeting issue 同时跑会竞争 dev
+          # rebase + 重试最多 3 次, 任何一次最终失败必须 fail-closed
+          # (绝不能让飞书任务已建但归档没落盘)
+          attempt=0
+          max_attempts=3
+          until git push origin HEAD:dev; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "::error::push to dev 重试 $max_attempts 次后仍失败"
+              exit 1
+            fi
+            echo "::warning::push 失败 (第 $attempt 次), 拉取 dev 最新内容后 rebase 重试"
+            git fetch origin dev
+            git rebase origin/dev
+          done
 
       - name: Comment on issue and close
         env:

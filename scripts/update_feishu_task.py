@@ -30,7 +30,9 @@ import requests
 from feishu_content import FEISHU_BASE, get_tenant_token
 
 TASK_RE = re.compile(r"\[(DONE-)?TASK-([A-Za-z0-9_-]+)\]")
-TASKS_JSON = Path(".planning/tasks.json")
+# 锚定仓库根目录, 不依赖 cwd
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+TASKS_JSON = _REPO_ROOT / ".planning" / "tasks.json"
 
 
 def find_task_guid(commit_id: str) -> str | None:

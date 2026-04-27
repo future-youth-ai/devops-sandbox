@@ -27,9 +27,10 @@ def test_done_tag_but_missing_secrets(monkeypatch) -> None:
 
 @responses.activate
 def test_done_tag_calls_patch(monkeypatch, tmp_path) -> None:
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / ".planning").mkdir()
-    (tmp_path / ".planning/tasks.json").write_text(
+    tasks_json = tmp_path / ".planning" / "tasks.json"
+    monkeypatch.setattr(update_feishu_task, "TASKS_JSON", tasks_json)
+    tasks_json.parent.mkdir(parents=True)
+    tasks_json.write_text(
         json.dumps({"issue#1": [{"guid": "g-abc12345-full", "title": "x"}]})
     )
 
@@ -55,9 +56,10 @@ def test_done_tag_calls_patch(monkeypatch, tmp_path) -> None:
 
 @responses.activate
 def test_unknown_task_warns_no_call(monkeypatch, tmp_path) -> None:
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / ".planning").mkdir()
-    (tmp_path / ".planning/tasks.json").write_text(
+    tasks_json = tmp_path / ".planning" / "tasks.json"
+    monkeypatch.setattr(update_feishu_task, "TASKS_JSON", tasks_json)
+    tasks_json.parent.mkdir(parents=True)
+    tasks_json.write_text(
         json.dumps({"issue#1": [{"guid": "g-real", "title": "x"}]})
     )
 
@@ -79,9 +81,10 @@ def test_unknown_task_warns_no_call(monkeypatch, tmp_path) -> None:
 @responses.activate
 def test_non_done_tag_does_not_patch(monkeypatch, tmp_path) -> None:
     """普通 [TASK-xxx] 不该触发 PATCH (当前实现)."""
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / ".planning").mkdir()
-    (tmp_path / ".planning/tasks.json").write_text(
+    tasks_json = tmp_path / ".planning" / "tasks.json"
+    monkeypatch.setattr(update_feishu_task, "TASKS_JSON", tasks_json)
+    tasks_json.parent.mkdir(parents=True)
+    tasks_json.write_text(
         json.dumps({"issue#1": [{"guid": "g-abc", "title": "x"}]})
     )
 
@@ -102,9 +105,10 @@ def test_non_done_tag_does_not_patch(monkeypatch, tmp_path) -> None:
 
 @responses.activate
 def test_multiple_tasks_in_one_commit(monkeypatch, tmp_path) -> None:
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / ".planning").mkdir()
-    (tmp_path / ".planning/tasks.json").write_text(
+    tasks_json = tmp_path / ".planning" / "tasks.json"
+    monkeypatch.setattr(update_feishu_task, "TASKS_JSON", tasks_json)
+    tasks_json.parent.mkdir(parents=True)
+    tasks_json.write_text(
         json.dumps(
             {
                 "issue#1": [

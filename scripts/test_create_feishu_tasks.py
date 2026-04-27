@@ -10,7 +10,9 @@ import create_feishu_tasks
 
 @responses.activate
 def test_create_tasks_writes_mapping(tmp_path, monkeypatch) -> None:
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        create_feishu_tasks, "TASKS_JSON_PATH", tmp_path / ".planning" / "tasks.json"
+    )
 
     # mock token
     responses.add(
@@ -89,7 +91,9 @@ def test_due_date_with_explicit_tz_is_preserved(tmp_path, monkeypatch) -> None:
     """due_date 含时区不应被覆盖成 UTC."""
     from datetime import datetime
 
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        create_feishu_tasks, "TASKS_JSON_PATH", tmp_path / ".planning" / "tasks.json"
+    )
     responses.add(
         responses.POST,
         "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
@@ -143,7 +147,9 @@ def test_invalid_action_items_filtered_by_pydantic(tmp_path, monkeypatch) -> Non
 @responses.activate
 def test_one_failed_task_does_not_abort_batch(tmp_path, monkeypatch) -> None:
     """单条 item 创建失败不应让整批失败."""
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        create_feishu_tasks, "TASKS_JSON_PATH", tmp_path / ".planning" / "tasks.json"
+    )
 
     responses.add(
         responses.POST,

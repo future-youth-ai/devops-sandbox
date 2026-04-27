@@ -27,6 +27,11 @@ from pathlib import Path
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ISSUE_NUM_RE = re.compile(r"^\d+$")
 
+# 锚定仓库根目录, 不依赖 cwd. 以模块顶层常量方式暴露便于测试 monkeypatch.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+TASKS_JSON_PATH = _REPO_ROOT / ".planning" / "tasks.json"
+MEETINGS_DIR = _REPO_ROOT / ".planning" / "meetings"
+
 TEMPLATE = """# {title}
 
 - **日期**: {date}
@@ -89,7 +94,7 @@ def main() -> int:
     feishu_url = os.environ.get("FEISHU_URL", "").strip() or "(未提供)"
 
     # 从 tasks.json 取本次的 created 条目, 做类型兜底
-    tasks_path = Path(".planning/tasks.json")
+    tasks_path = TASKS_JSON_PATH
     items: list[dict] = []
     if tasks_path.exists():
         try:
@@ -112,11 +117,16 @@ def main() -> int:
         table=build_table(items),
     )
 
-    out_path = Path(f".planning/meetings/{date}-issue{issue_num}.md")
+    out_path = MEETINGS_DIR / f"{date}-issue{issue_num}.md"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(md, encoding="utf-8")
-    # 输出文件路径供 workflow 用 (echo "$(python archive_meeting.py)")
-    print(str(out_path))
+    # 输出仓库根的相对路径供 workflow 用
+    try:
+        rel_path = out_path.relative_to(_REPO_ROOT)
+        print(str(rel_path))
+    except ValueError:
+        # 测试场景下 MEETINGS_DIR 被 patch 到 _REPO_ROOT 之外, 直接输出绝对路径
+        print(str(out_path))
     return 0
 
 
