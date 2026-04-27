@@ -40,6 +40,12 @@ CONVENTIONAL_PATTERN = re.compile(
 # 允许的 merge / revert 自动提交（由 GitHub 生成）
 MERGE_PATTERN = re.compile(r"^Merge (branch|pull request|remote-tracking)")
 
+# 可选的尾标签: [TASK-<id>] / [DONE-TASK-<id>]
+# - 普通 TASK 标签:  推进任务 (in progress)
+# - DONE-TASK 标签:  完成任务 (调用 PATCH 标记 completed)
+# 这两种都允许出现在前述四类主体之后, 由 sync_feishu / update_feishu_task 解析.
+TASK_TAG_RE = re.compile(r"\s*\[(?:DONE-)?TASK-[A-Za-z0-9_-]+\]\s*$")
+
 
 def get_commits(base: str, head: str) -> list[tuple[str, str]]:
     """返回 [(sha, subject)] 列表 (base, head] 区间。"""
@@ -60,21 +66,30 @@ def get_commits(base: str, head: str) -> list[tuple[str, str]]:
 
 
 def validate_subject(subject: str) -> tuple[bool, str]:
-    """返回 (是否合法, 错误信息或匹配到的类型)。"""
-    if MERGE_PATTERN.match(subject):
+    """返回 (是否合法, 错误信息或匹配到的类型)。
+
+    允许在前述格式后追加可选 [TASK-xxx] 或 [DONE-TASK-xxx] 尾标签,
+    例如 'feat(api): 实现登录 [TASK-abc123]' 或 'fix: 修 bug [DONE-TASK-xyz]'.
+    校验时先把尾标签剥掉, 再判主体格式.
+    """
+    # 剥掉尾部任务标签 (如有), 只校验主体
+    bare = TASK_TAG_RE.sub("", subject).strip()
+
+    if MERGE_PATTERN.match(bare):
         return True, "merge"
-    if DELIVERABLE_PATTERN.match(subject):
+    if DELIVERABLE_PATTERN.match(bare):
         return True, "deliverable"
-    if PHASE_PATTERN.match(subject):
+    if PHASE_PATTERN.match(bare):
         return True, "phase"
-    if CONVENTIONAL_PATTERN.match(subject):
+    if CONVENTIONAL_PATTERN.match(bare):
         return True, "conventional"
     return False, (
         "必须匹配以下格式之一:\n"
         "    [DEL-xx] 描述                       (交付物)\n"
         "    [DEL-xx][MVP] 描述                  (里程碑)\n"
         "    [PHASE-x] 描述                      (阶段)\n"
-        f"    <type>: 描述   (type ∈ {', '.join(CONVENTIONAL_TYPES)})"
+        f"    <type>: 描述   (type ∈ {', '.join(CONVENTIONAL_TYPES)})\n"
+        "  以上格式后可选追加 [TASK-xxx] 或 [DONE-TASK-xxx] 尾标签"
     )
 
 
