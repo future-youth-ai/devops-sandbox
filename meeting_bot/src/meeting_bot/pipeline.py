@@ -117,7 +117,27 @@ class Pipeline:
     async def _collect(self, meeting_id: str, minute_token: str | None) -> MeetingSummary:
         """从飞书 VC + 妙记拉数据, 生成 MeetingSummary。"""
         meeting_info = await self.vc.get_meeting(meeting_id)
-        participants_raw = await self.vc.list_participants(meeting_id)
+
+        # Feishu participant_list API 需要 meeting_no + 时间范围, 不是 meeting_id
+        # (详见 meeting_bot.feishu.vc.VCAPI.list_participants 文档)
+        meeting_no = str(meeting_info.get("meeting_no") or "")
+        start_ts = _normalize_ts(meeting_info.get("start_time"))
+        end_ts = _normalize_ts(meeting_info.get("end_time"))
+        if meeting_no and start_ts > 0 and end_ts > 0:
+            participants_raw = await self.vc.list_participants(
+                meeting_no=meeting_no,
+                meeting_start_time=start_ts,
+                meeting_end_time=end_ts,
+            )
+        else:
+            log.warning(
+                "participants_skipped_missing_meeting_info",
+                meeting_id=meeting_id,
+                has_meeting_no=bool(meeting_no),
+                has_start=start_ts > 0,
+                has_end=end_ts > 0,
+            )
+            participants_raw = []
 
         attendees = [
             Attendee(
@@ -128,14 +148,34 @@ class Pipeline:
             for p in participants_raw
         ]
 
+        # 两个妙记调用并发拉取, 任一失败都不阻断另一个, 下游靠 .get(default) 降级
         minute_data: dict[str, Any] = {}
         summary_data: dict[str, Any] = {}
         if minute_token:
-            minute_data = await self.minutes.get_minute(minute_token)
-            try:
-                summary_data = await self.minutes.get_summary(minute_token)
-            except Exception as e:
-                log.warning("minutes_summary_unavailable", error=str(e))
+            minutes_results: list[Any] = await asyncio.gather(
+                self.minutes.get_minute(minute_token),
+                self.minutes.get_statistics(minute_token),
+                return_exceptions=True,
+            )
+            minute_result, stats_result = minutes_results[0], minutes_results[1]
+            if isinstance(minute_result, BaseException):
+                log.warning("minutes_unavailable", error=str(minute_result))
+            else:
+                minute_data = minute_result
+            if isinstance(stats_result, BaseException):
+                log.warning("minutes_statistics_unavailable", error=str(stats_result))
+            else:
+                summary_data = stats_result
+
+            # 显式提醒: Feishu /statistics 不含 AI 摘要/行动项/决议/要点,
+            # 需要上层接入 LLM 后处理才能真填. 否则这些字段恒为空.
+            if summary_data and not summary_data.get("summary"):
+                log.warning(
+                    "minutes_ai_summary_not_available",
+                    hint="Feishu OpenAPI /statistics 不返回 AI 摘要; "
+                    "如需 summary/key_points/decisions/action_items, "
+                    "请基于 get_transcript + LLM 后处理生成",
+                )
 
         # 解析妙记行动项 - 字段名以实际 API 返回为准
         raw_actions = summary_data.get("action_items", []) or []
@@ -285,3 +325,34 @@ def _parse_ts(value: Any) -> datetime:
         except ValueError:
             return datetime.now(tz=UTC)
     return datetime.now(tz=UTC)
+
+
+def _normalize_ts(value: Any) -> int:
+    """把各种形式的时间 (秒/毫秒/ISO 字符串) 统一归一到 秒级 Unix 时间戳.
+
+    解析失败 / None / 空值一律返回 0, 让调用方走 skip 分支.
+    这样避免把 ISO 字符串直接 int() 抛异常, 或把毫秒时间戳原样透传给飞书.
+    """
+    if value is None or value == "":
+        return 0
+    if isinstance(value, bool):  # bool 是 int 子类, 单独拦截
+        return 0
+    if isinstance(value, int | float):
+        ts = float(value)
+        if ts <= 0:
+            return 0
+        if ts > 1e12:  # 毫秒 -> 秒
+            ts /= 1000.0
+        return int(ts)
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return 0
+        if s.isdigit():
+            return _normalize_ts(int(s))
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            return int(dt.timestamp())
+        except ValueError:
+            return 0
+    return 0
