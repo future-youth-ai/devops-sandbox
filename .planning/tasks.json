@@ -49,5 +49,49 @@
       "record_id": "recvi61oSQ13jM",
       "title": "与黄总沟通测试环境事宜"
     }
+  ],
+  "issue#23": [
+    {
+      "assignee_name": "Jimmy",
+      "due_date": null,
+      "record_id": "recvi67kTghiFK",
+      "title": "测试飞书API脚本能否正常运行"
+    },
+    {
+      "assignee_name": "赵凌云",
+      "due_date": null,
+      "record_id": "recvi67ljCj5Av",
+      "title": "提供GitHub工作流文档给赵凌云"
+    },
+    {
+      "assignee_name": "赵凌云",
+      "due_date": null,
+      "record_id": "recvi67lK9gBMb",
+      "title": "将技能文件发送给赵凌云"
+    },
+    {
+      "assignee_name": "Jimmy",
+      "due_date": null,
+      "record_id": "recvi67m9Y78XH",
+      "title": "与黄总沟通测试环境事宜"
+    },
+    {
+      "assignee_name": "飞哥哥",
+      "due_date": null,
+      "record_id": "recvi67myytryO",
+      "title": "查找适合爬取的论文网站"
+    },
+    {
+      "assignee_name": "Jimmy",
+      "due_date": null,
+      "record_id": "recvi67mXxGzIj",
+      "title": "完成并发送招标文件规范书"
+    },
+    {
+      "assignee_name": "赵凌云",
+      "due_date": null,
+      "record_id": "recvi67nnFb893",
+      "title": "完善数据生成器"
+    }
   ]
 }
