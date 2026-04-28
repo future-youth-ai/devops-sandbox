@@ -4,8 +4,6 @@
   FEISHU_APP_ID / FEISHU_APP_SECRET   必需
   ACTION_ITEMS_JSON                    必需 (extract step 的 JSON 数组字符串)
   ISSUE_NUMBER                         必需 (用于 tasks.json 索引 key)
-  MEETING_DATE                         可选 (YYYY-MM-DD, 用于填 提出日期)
-  REPO_NAME                            可选 (owner/repo, 用于拼 GitHub issue 链接)
   GITHUB_OUTPUT                        可选 (写 record_ids / task_md 给下游 step)
   FEISHU_BITABLE_APP_TOKEN             必需
   FEISHU_BITABLE_TABLE_ID              必需
@@ -62,7 +60,6 @@ class ActionItemInput(BaseModel):
     description: str = Field(default="", max_length=500)
     assignee_name: str = ""
     due_date: str | None = None
-    priority: str = Field(default="P2", pattern=r"^P[0-3]$")
 
 
 def create_bitable_record(
@@ -73,15 +70,11 @@ def create_bitable_record(
     description: str,
     due_date: str | None,
     assignee_name: str,
-    priority: str = "P2",
-    meeting_date: str = "",
-    issue_url: str = "",
 ) -> str:
     """在多维表格创建一条记录, 返回 record_id."""
     fields: dict = {
         "需求描述": title,
         "进展状态": "未启动",
-        "优先级": priority,
     }
     if description:
         fields["备注"] = description
@@ -95,16 +88,6 @@ def create_bitable_record(
             fields["预计交付日期"] = int(dt.timestamp()) * 1000
         except ValueError:
             pass
-    if meeting_date:
-        try:
-            dt = datetime.fromisoformat(meeting_date)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            fields["提出日期"] = int(dt.timestamp()) * 1000
-        except ValueError:
-            pass
-    if issue_url:
-        fields["相关文档"] = issue_url
 
     r = _SESSION.post(
         f"{FEISHU_BASE}/bitable/v1/apps/{app_token}/tables/{table_id}/records",
@@ -197,10 +180,6 @@ def main() -> int:
         return 2
     tenant_token = get_tenant_token(app_id, app_secret)
 
-    meeting_date = os.environ.get("MEETING_DATE", "")
-    repo_name = os.environ.get("REPO_NAME", "")
-    issue_url = f"https://github.com/{repo_name}/issues/{issue_num}" if repo_name else ""
-
     # 幂等: 检查已创建的记录, 按 title 去重
     mapping = load_tasks_map()
     key = f"issue#{issue_num}"
@@ -220,9 +199,6 @@ def main() -> int:
                 description=item.get("description", ""),
                 due_date=item.get("due_date"),
                 assignee_name=item.get("assignee_name", ""),
-                priority=item.get("priority", "P2"),
-                meeting_date=meeting_date,
-                issue_url=issue_url,
             )
         except Exception as e:
             print(f"::warning::创建记录 {item.get('title')!r} 失败: {e}", file=sys.stderr)

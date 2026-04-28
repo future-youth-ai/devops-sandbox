@@ -35,7 +35,6 @@ USER_PROMPT_TEMPLATE = """从以下会议记录中提取所有"行动项 / 待�
    - description:  补充背景, ≤200 字, 可空
    - assignee_name: 负责人姓名 (从原文找), 没明确指派写空字符串
    - due_date:     截止日期 YYYY-MM-DD, 没说写 null
-   - priority:     优先级 P0/P1/P2/P3 (P0=紧急, P1=重要, P2=普通, P3=低优), 根据上下文语气和紧迫程度判断
 4. 如果会议没有任何 action item, 返回 {{"items": []}}.
 
 会议记录:
@@ -52,7 +51,6 @@ class ActionItem(BaseModel):
     description: str = Field("", max_length=500)
     assignee_name: str = ""
     due_date: str | None = None
-    priority: str = Field("P2", pattern=r"^P[0-3]$")
 
 
 def extract(
