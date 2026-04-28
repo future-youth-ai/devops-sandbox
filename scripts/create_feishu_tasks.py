@@ -1,15 +1,17 @@
-"""读 ACTION_ITEMS_JSON, 调飞书 Task v2 批量建任务, 维护 .planning/tasks.json 映射.
+"""读 ACTION_ITEMS_JSON, 在飞书多维表格(需求池)创建记录, 维护 .planning/tasks.json 映射.
 
 环境变量:
   FEISHU_APP_ID / FEISHU_APP_SECRET   必需
   ACTION_ITEMS_JSON                    必需 (extract step 的 JSON 数组字符串)
   ISSUE_NUMBER                         必需 (用于 tasks.json 索引 key)
-  GITHUB_OUTPUT                        可选 (写 guids / task_md 给下游 step)
+  GITHUB_OUTPUT                        可选 (写 record_ids / task_md 给下游 step)
+  FEISHU_BITABLE_APP_TOKEN             可选 (默认 TGzCb2Xipaw56WstSUscP9ddn8b)
+  FEISHU_BITABLE_TABLE_ID              可选 (默认 tblg4XejzUeTKHsf)
 
 行为:
-  - 对每个 item 调 POST /task/v2/tasks 创建任务
-  - 暂不解析 assignee_name -> open_id (留 TODO, Phase 5.3 跑通后再补)
-  - 把 {issue#N: [{guid, title, assignee_name, due_date}]} 写到 .planning/tasks.json
+  - 对每个 item 调 bitable record create API 写入需求池
+  - 字段映射: title→需求描述, due_date→预计交付日期, 进展状态→未启动
+  - 把 {issue#N: [{record_id, title, assignee_name, due_date}]} 写到 .planning/tasks.json
 """
 
 from __future__ import annotations
@@ -29,9 +31,12 @@ from urllib3.util.retry import Retry
 from feishu_content import FEISHU_BASE, get_tenant_token
 
 # 锚定仓库根目录, 不依赖 cwd
-# (workflow 里 working-directory 是 scripts/, 但 .planning/ 必须落在 repo root)
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 TASKS_JSON_PATH = _REPO_ROOT / ".planning" / "tasks.json"
+
+# 飞书多维表格 (需求池管理) 默认配置
+DEFAULT_APP_TOKEN = "TGzCb2Xipaw56WstSUscP9ddn8b"
+DEFAULT_TABLE_ID = "tblg4XejzUeTKHsf"
 
 
 def _build_session() -> requests.Session:
@@ -39,9 +44,9 @@ def _build_session() -> requests.Session:
     s = requests.Session()
     retries = Retry(
         total=3,
-        backoff_factor=0.5,  # 0.5s, 1s, 2s
+        backoff_factor=0.5,
         status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["POST", "GET"],
+        allowed_methods=["POST", "GET", "PATCH"],
         raise_on_status=False,
     )
     s.mount("https://", HTTPAdapter(max_retries=retries))
@@ -52,12 +57,7 @@ _SESSION = _build_session()
 
 
 class ActionItemInput(BaseModel):
-    """对 ACTION_ITEMS_JSON 的 schema 校验, 防上游格式异常.
-
-    长度限制对齐 extract_action_items.py 的 ActionItem schema:
-    - title: max 100 (上游 prompt 要求 ≤30 字, 留余量)
-    - description: max 500
-    """
+    """对 ACTION_ITEMS_JSON 的 schema 校验, 防上游格式异常."""
 
     title: str = Field(default="未命名", min_length=1, max_length=100)
     description: str = Field(default="", max_length=500)
@@ -65,54 +65,49 @@ class ActionItemInput(BaseModel):
     due_date: str | None = None
 
 
-def create_task(
+def create_bitable_record(
     tenant_token: str,
+    app_token: str,
+    table_id: str,
     title: str,
     description: str,
     due_date: str | None,
-    assignee_open_ids: list[str],
+    assignee_name: str,
 ) -> str:
-    """调飞书 Task v2 创建任务, 返回 guid."""
-    body: dict = {"summary": title, "description": description}
+    """在多维表格创建一条记录, 返回 record_id."""
+    fields: dict = {
+        "需求描述": title,
+        "进展状态": "未启动",
+    }
+    if description:
+        fields["备注"] = description
+    if assignee_name:
+        fields["备注"] = f"[负责人: {assignee_name}] {description}" if description else f"[负责人: {assignee_name}]"
     if due_date:
         try:
             dt = datetime.fromisoformat(due_date)
-            # 只在原本无 tz 时按 UTC 处理; 有 tz 则保留, 避免覆盖原时区
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
-            ts_sec = str(int(dt.timestamp()))
-            body["due"] = {
-                "time": ts_sec,
-                "timezone": "Asia/Shanghai",
-                "is_all_day": True,
-            }
+            fields["预计交付日期"] = int(dt.timestamp()) * 1000
         except ValueError:
-            # 日期格式不合法就忽略, 不让一条 item 失败拖累整批
             pass
-    if assignee_open_ids:
-        body["members"] = [
-            {"id": oid, "type": "user", "role": "assignee"}
-            for oid in assignee_open_ids
-        ]
+
     r = _SESSION.post(
-        f"{FEISHU_BASE}/task/v2/tasks",
+        f"{FEISHU_BASE}/bitable/v1/apps/{app_token}/tables/{table_id}/records",
         headers={"Authorization": f"Bearer {tenant_token}"},
-        json=body,
+        json={"fields": fields},
         timeout=30,
     )
     if not r.ok:
-        raise RuntimeError(f"create task HTTP {r.status_code}: {r.text}")
+        raise RuntimeError(f"create record HTTP {r.status_code}: {r.text}")
     data = r.json()
     if data.get("code") != 0:
-        raise RuntimeError(f"create task 失败: {data}")
-    return data.get("data", {}).get("task", {}).get("guid", "")  # type: ignore[no-any-return]
+        raise RuntimeError(f"create record 失败: {data}")
+    return data.get("data", {}).get("record", {}).get("record_id", "")
 
 
 def load_tasks_map() -> dict:
-    """读 .planning/tasks.json, 不存在或脏数据则返回空 dict.
-
-    类型兜底: 顶层不是 dict / value 不是 list / list 内含非 dict 都不让脚本崩.
-    """
+    """读 .planning/tasks.json, 不存在或脏数据则返回空 dict."""
     if not TASKS_JSON_PATH.exists():
         return {}
     try:
@@ -129,7 +124,6 @@ def load_tasks_map() -> dict:
             file=sys.stderr,
         )
         return {}
-    # 清洗每个 key 的 value: 必须是 list 且元素必须是 dict
     cleaned: dict = {}
     for k, v in data.items():
         if isinstance(v, list):
@@ -157,7 +151,6 @@ def main() -> int:
         print("ℹ️ 没有 action items, 跳过任务创建")
         return 0
 
-    # 用 pydantic 校验每条 item, 不合法的过滤
     items: list[dict] = []
     for ri in raw_items:
         if not isinstance(ri, dict):
@@ -180,33 +173,35 @@ def main() -> int:
         )
         return 2
 
+    app_token = os.environ.get("FEISHU_BITABLE_APP_TOKEN", DEFAULT_APP_TOKEN)
+    table_id = os.environ.get("FEISHU_BITABLE_TABLE_ID", DEFAULT_TABLE_ID)
     tenant_token = get_tenant_token(app_id, app_secret)
 
     created: list[dict] = []
     for item in items:
-        # TODO(后续优化): assignee_name -> open_id 解析 (调 contact API)
-        # 当前实现: assignee 留空, 任务先建出来, 团队成员手动认领
         try:
-            guid = create_task(
+            record_id = create_bitable_record(
                 tenant_token,
+                app_token=app_token,
+                table_id=table_id,
                 title=item.get("title", "未命名"),
                 description=item.get("description", ""),
                 due_date=item.get("due_date"),
-                assignee_open_ids=[],
+                assignee_name=item.get("assignee_name", ""),
             )
         except Exception as e:
-            print(f"::warning::创建任务 {item.get('title')!r} 失败: {e}", file=sys.stderr)
+            print(f"::warning::创建记录 {item.get('title')!r} 失败: {e}", file=sys.stderr)
             continue
-        if guid:
+        if record_id:
             created.append(
                 {
-                    "guid": guid,
+                    "record_id": record_id,
                     "title": item.get("title", ""),
                     "assignee_name": item.get("assignee_name", ""),
                     "due_date": item.get("due_date"),
                 }
             )
-            print(f"  ✅ {item.get('title')} -> {guid}")
+            print(f"  ✅ {item.get('title')} -> {record_id}")
 
     # 维护 tasks.json
     mapping = load_tasks_map()
@@ -218,17 +213,16 @@ def main() -> int:
     # 输出给 workflow 下游 step
     gh_out = os.environ.get("GITHUB_OUTPUT")
     if gh_out:
-        guids = " ".join(c["guid"] for c in created)
+        record_ids = " ".join(c["record_id"] for c in created)
         md_lines = "\n".join(
             f"- **{c['title']}** ({c['assignee_name'] or '未指派'}, "
-            f"{c['due_date'] or '无截止'}): `{c['guid']}`"
+            f"{c['due_date'] or '无截止'}): `{c['record_id']}`"
             for c in created
         ) or "_(无)_"
-        # 用 UUID 当 heredoc 分隔符, 避免内容里偶遇 EOF 标记导致 GITHUB_OUTPUT 解析错乱
         delim = f"TASK_MD_{uuid.uuid4().hex}"
         with open(gh_out, "a") as f:
             f.write(f"task_count={len(created)}\n")
-            f.write(f"guids={guids}\n")
+            f.write(f"record_ids={record_ids}\n")
             f.write(f"task_md<<{delim}\n{md_lines}\n{delim}\n")
     return 0
 
