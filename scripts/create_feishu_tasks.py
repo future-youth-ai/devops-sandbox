@@ -80,8 +80,12 @@ def create_task(
             # 只在原本无 tz 时按 UTC 处理; 有 tz 则保留, 避免覆盖原时区
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
-            ts_ms = int(dt.timestamp() * 1000)
-            body["due"] = {"timestamp": str(ts_ms), "is_all_day": True}
+            ts_sec = str(int(dt.timestamp()))
+            body["due"] = {
+                "time": ts_sec,
+                "timezone": "Asia/Shanghai",
+                "is_all_day": True,
+            }
         except ValueError:
             # 日期格式不合法就忽略, 不让一条 item 失败拖累整批
             pass
@@ -96,7 +100,8 @@ def create_task(
         json=body,
         timeout=30,
     )
-    r.raise_for_status()
+    if not r.ok:
+        raise RuntimeError(f"create task HTTP {r.status_code}: {r.text}")
     data = r.json()
     if data.get("code") != 0:
         raise RuntimeError(f"create task 失败: {data}")
