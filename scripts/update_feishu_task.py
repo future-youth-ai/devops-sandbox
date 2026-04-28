@@ -3,8 +3,8 @@
 环境变量:
   FEISHU_APP_ID / FEISHU_APP_SECRET    必需
   COMMIT_MESSAGE                        必需 (从 sync_feishu workflow 传)
-  FEISHU_BITABLE_APP_TOKEN             可选 (默认 TGzCb2Xipaw56WstSUscP9ddn8b)
-  FEISHU_BITABLE_TABLE_ID              可选 (默认 tblg4XejzUeTKHsf)
+  FEISHU_BITABLE_APP_TOKEN             必需
+  FEISHU_BITABLE_TABLE_ID              必需
 
 行为:
   - 解析 commit subject 里的 [TASK-xxx] / [DONE-TASK-xxx]
@@ -29,16 +29,13 @@ TASK_RE = re.compile(r"\[(DONE-)?TASK-([A-Za-z0-9_-]+)\]")
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 TASKS_JSON = _REPO_ROOT / ".planning" / "tasks.json"
 
-DEFAULT_APP_TOKEN = "TGzCb2Xipaw56WstSUscP9ddn8b"
-DEFAULT_TABLE_ID = "tblg4XejzUeTKHsf"
-
-
 def find_record_id(commit_id: str) -> str | None:
     """从 tasks.json 找匹配的真实 record_id.
 
     匹配规则:
-      1) 完全相等
-      2) tasks.json 里的 record_id 以 commit_id 开头 (commit 里写短前缀)
+      1) 精确匹配优先
+      2) 唯一前缀匹配
+      3) 多个前缀命中 -> 视为歧义, 返回 None 并 warn
     """
     if not TASKS_JSON.exists():
         return None
@@ -46,6 +43,8 @@ def find_record_id(commit_id: str) -> str | None:
         mapping = json.loads(TASKS_JSON.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return None
+    exact: str | None = None
+    prefix_matches: list[str] = []
     for entries in mapping.values():
         if not isinstance(entries, list):
             continue
@@ -53,8 +52,22 @@ def find_record_id(commit_id: str) -> str | None:
             rid = e.get("record_id", "")
             if not rid:
                 continue
-            if rid == commit_id or rid.startswith(commit_id):
-                return rid
+            if rid == commit_id:
+                exact = rid
+                break
+            if rid.startswith(commit_id):
+                prefix_matches.append(rid)
+        if exact:
+            break
+    if exact:
+        return exact
+    if len(prefix_matches) == 1:
+        return prefix_matches[0]
+    if prefix_matches:
+        print(
+            f"::warning::TASK-{commit_id} 前缀匹配到多个记录: {prefix_matches}, 跳过",
+            file=sys.stderr,
+        )
     return None
 
 
@@ -97,8 +110,11 @@ def main() -> int:
         print("::warning::缺 FEISHU_APP_ID/SECRET, 跳过", file=sys.stderr)
         return 0
 
-    app_token = os.environ.get("FEISHU_BITABLE_APP_TOKEN", DEFAULT_APP_TOKEN)
-    table_id = os.environ.get("FEISHU_BITABLE_TABLE_ID", DEFAULT_TABLE_ID)
+    app_token = os.environ.get("FEISHU_BITABLE_APP_TOKEN", "")
+    table_id = os.environ.get("FEISHU_BITABLE_TABLE_ID", "")
+    if not (app_token and table_id):
+        print("::warning::缺 FEISHU_BITABLE_APP_TOKEN/TABLE_ID, 跳过", file=sys.stderr)
+        return 0
 
     try:
         tenant_token = get_tenant_token(app_id, app_secret)
@@ -106,6 +122,7 @@ def main() -> int:
         print(f"::error::获取 token 失败: {e}", file=sys.stderr)
         return 1
 
+    failures = 0
     for m in matches:
         is_done = bool(m.group(1))
         commit_id = m.group(2)
@@ -115,6 +132,7 @@ def main() -> int:
                 f"::warning::未在 .planning/tasks.json 找到 TASK-{commit_id}",
                 file=sys.stderr,
             )
+            failures += 1
             continue
         status = "验收完成" if is_done else "开发中"
         try:
@@ -124,7 +142,8 @@ def main() -> int:
                 f"::warning::更新记录 {record_id} 失败: {e}",
                 file=sys.stderr,
             )
-    return 0
+            failures += 1
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

@@ -5,8 +5,8 @@
   ACTION_ITEMS_JSON                    必需 (extract step 的 JSON 数组字符串)
   ISSUE_NUMBER                         必需 (用于 tasks.json 索引 key)
   GITHUB_OUTPUT                        可选 (写 record_ids / task_md 给下游 step)
-  FEISHU_BITABLE_APP_TOKEN             可选 (默认 TGzCb2Xipaw56WstSUscP9ddn8b)
-  FEISHU_BITABLE_TABLE_ID              可选 (默认 tblg4XejzUeTKHsf)
+  FEISHU_BITABLE_APP_TOKEN             必需
+  FEISHU_BITABLE_TABLE_ID              必需
 
 行为:
   - 对每个 item 调 bitable record create API 写入需求池
@@ -34,9 +34,6 @@ from feishu_content import FEISHU_BASE, get_tenant_token
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 TASKS_JSON_PATH = _REPO_ROOT / ".planning" / "tasks.json"
 
-# 飞书多维表格 (需求池管理) 默认配置
-DEFAULT_APP_TOKEN = "TGzCb2Xipaw56WstSUscP9ddn8b"
-DEFAULT_TABLE_ID = "tblg4XejzUeTKHsf"
 
 
 def _build_session() -> requests.Session:
@@ -173,12 +170,26 @@ def main() -> int:
         )
         return 2
 
-    app_token = os.environ.get("FEISHU_BITABLE_APP_TOKEN", DEFAULT_APP_TOKEN)
-    table_id = os.environ.get("FEISHU_BITABLE_TABLE_ID", DEFAULT_TABLE_ID)
+    app_token = os.environ.get("FEISHU_BITABLE_APP_TOKEN", "")
+    table_id = os.environ.get("FEISHU_BITABLE_TABLE_ID", "")
+    if not (app_token and table_id):
+        print(
+            "::error::缺 FEISHU_BITABLE_APP_TOKEN / FEISHU_BITABLE_TABLE_ID",
+            file=sys.stderr,
+        )
+        return 2
     tenant_token = get_tenant_token(app_id, app_secret)
+
+    # 幂等: 检查已创建的记录, 按 title 去重
+    mapping = load_tasks_map()
+    key = f"issue#{issue_num}"
+    existing_titles = {e.get("title") for e in mapping.get(key, [])}
 
     created: list[dict] = []
     for item in items:
+        if item.get("title") in existing_titles:
+            print(f"  ⏭️ 跳过已存在: {item.get('title')}")
+            continue
         try:
             record_id = create_bitable_record(
                 tenant_token,
@@ -204,8 +215,6 @@ def main() -> int:
             print(f"  ✅ {item.get('title')} -> {record_id}")
 
     # 维护 tasks.json
-    mapping = load_tasks_map()
-    key = f"issue#{issue_num}"
     mapping.setdefault(key, []).extend(created)
     save_tasks_map(mapping)
     print(f"已写 {TASKS_JSON_PATH}, key={key}, 新增 {len(created)} 条")
