@@ -77,6 +77,8 @@ jobs:
         working-directory: scripts
         env:
           ACTION_ITEMS_JSON: ${{ steps.extract.outputs.action_items }}
+          MEETING_DATE: ${{ steps.parse.outputs.meeting_date }}
+          REPO_NAME: ${{ github.repository }}
         run: python create_feishu_tasks.py
 
       - name: Archive meeting metadata
