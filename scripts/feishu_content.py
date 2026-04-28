@@ -92,28 +92,80 @@ def fetch_docx(tenant_token: str, doc_id: str) -> str:
     return _blocks_to_text(all_blocks)
 
 
+# 飞书 docx block_type → markdown 前缀
+# 参考: https://open.feishu.cn/document/server-docs/docs/docs/docx-v1/data-structure/block
+_PREFIX_BY_BLOCK_TYPE: dict[int, str] = {
+    2: "",  # text 段落
+    3: "# ",  # heading1
+    4: "## ",  # heading2
+    5: "### ",  # heading3
+    6: "#### ",  # heading4
+    7: "##### ",  # heading5
+    8: "###### ",  # heading6
+    9: "###### ",  # heading7 (md 最多 6 级)
+    10: "###### ",  # heading8
+    11: "###### ",  # heading9
+    12: "- ",  # bullet (无序列表)
+    13: "1. ",  # ordered (有序列表)
+    14: "",  # code (特殊处理: fenced code)
+    15: "> ",  # quote 引用
+    17: "- [ ] ",  # todo 待办
+    19: "",  # callout 高亮块
+    22: "> ",  # quote_container 引用容器
+}
+
+
+def _extract_block_text(block: dict[str, Any]) -> str:
+    """从 block 提取所有 text_run.content 拼接, 不依赖 block_type.
+
+    Fallback 策略: 扫所有 dict 字段, 任何含 elements 数组且元素含
+    text_run.content 的, 收集起来. 这样能兜住 Feishu 新加的 block 类型.
+    """
+    pieces: list[str] = []
+    for value in block.values():
+        if not isinstance(value, dict):
+            continue
+        elements = value.get("elements")
+        if not isinstance(elements, list):
+            continue
+        for e in elements:
+            if not isinstance(e, dict):
+                continue
+            text_run = e.get("text_run")
+            if isinstance(text_run, dict):
+                content = text_run.get("content", "")
+                if isinstance(content, str) and content:
+                    pieces.append(content)
+    return "".join(pieces)
+
+
 def _blocks_to_text(blocks: list[dict[str, Any]]) -> str:
-    """简化提取 text + heading1-9 的文字内容, 忽略图片/表格/代码块."""
+    """提取所有已知 block_type 的文字, 加 markdown 前缀.
+
+    覆盖: text / heading1-9 / bullet / ordered / todo / quote / callout / code /
+    quote_container. 未在白名单内的 block_type 走 fallback (无前缀但保留文字).
+
+    block_type=1 是 page 根容器, 跳过.
+    """
     out: list[str] = []
     for b in blocks:
         t = b.get("block_type")
-        if t == 2:  # text
-            text = "".join(
-                e.get("text_run", {}).get("content", "")
-                for e in b.get("text", {}).get("elements", [])
-            )
-            if text.strip():
-                out.append(text.strip())
-        elif isinstance(t, int) and 3 <= t <= 11:  # heading 1-9 (block_type 3..11)
-            level = t - 2  # heading{level}
-            field = f"heading{level}"
-            text = "".join(
-                e.get("text_run", {}).get("content", "")
-                for e in b.get(field, {}).get("elements", [])
-            )
-            if text.strip():
-                prefix = "#" * min(level, 6)
-                out.append(f"{prefix} {text.strip()}")
+        if t == 1:
+            # page 根容器, 没自己的文字内容
+            continue
+        text = _extract_block_text(b)
+        if not text.strip():
+            continue
+        if isinstance(t, int) and t in _PREFIX_BY_BLOCK_TYPE:
+            prefix = _PREFIX_BY_BLOCK_TYPE[t]
+            if t == 14:
+                # 代码块用 fenced code 包起来
+                out.append(f"```\n{text.strip()}\n```")
+            else:
+                out.append(f"{prefix}{text.strip()}")
+        else:
+            # 未知 block_type, 文字仍保留 (无前缀)
+            out.append(text.strip())
     return "\n\n".join(out)
 
 
