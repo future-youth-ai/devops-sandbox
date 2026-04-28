@@ -92,6 +92,18 @@
       "due_date": null,
       "record_id": "recvi67nnFb893",
       "title": "完善数据生成器"
+    },
+    {
+      "assignee_name": "赵凌云",
+      "due_date": null,
+      "record_id": "recvi68ymeJQiK",
+      "title": "发送技能文件给赵凌云"
+    },
+    {
+      "assignee_name": "Jimmy",
+      "due_date": null,
+      "record_id": "recvi68yJRiCFv",
+      "title": "与黄总沟通接口测试环境"
     }
   ]
 }
