@@ -145,7 +145,7 @@ jobs:
   ci-gate:
     name: meeting_bot / CI Gate
     if: always()
-    needs: [lint, typecheck, test, security-sast, security-sca, docker-build]
+    needs: [lint, scripts-lint, typecheck, test, security-sast, security-sca, docker-build]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -153,17 +153,19 @@ jobs:
     steps:
       - env:
           LINT: ${{ needs.lint.result }}
+          SCRIPTS_LINT: ${{ needs.scripts-lint.result }}
           TYPECHECK: ${{ needs.typecheck.result }}
           TEST: ${{ needs.test.result }}
           SAST: ${{ needs.security-sast.result }}
           SCA: ${{ needs.security-sca.result }}
           DOCKER: ${{ needs.docker-build.result }}
         run: |
-          echo "lint=$LINT typecheck=$TYPECHECK test=$TEST sast=$SAST sca=$SCA docker=$DOCKER"
-          if [ "$LINT" != "success" ] || [ "$TYPECHECK" != "success" ] || \
-             [ "$TEST" != "success" ] || [ "$SAST" != "success" ] || \
-             [ "$SCA" != "success" ] || [ "$DOCKER" != "success" ]; then
-            echo "::error::meeting_bot CI 未通过"
+          echo "lint=$LINT scripts_lint=$SCRIPTS_LINT typecheck=$TYPECHECK test=$TEST sast=$SAST sca=$SCA docker=$DOCKER"
+          if [ "$LINT" != "success" ] || [ "$SCRIPTS_LINT" != "success" ] || \
+             [ "$TYPECHECK" != "success" ] || [ "$TEST" != "success" ] || \
+             [ "$SAST" != "success" ] || [ "$SCA" != "success" ] || \
+             [ "$DOCKER" != "success" ]; then
+            echo "::error::CI 未通过"
             exit 1
           fi
-          echo "meeting_bot CI 全部通过 ✅"
+          echo "CI 全部通过 ✅"
