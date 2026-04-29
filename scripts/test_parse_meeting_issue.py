@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from parse_meeting_issue import extract_field
 
-
 SAMPLE_BODY = """### 会议标题
 
 4月23日 项目立项会

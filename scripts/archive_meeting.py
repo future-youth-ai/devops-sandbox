@@ -20,7 +20,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # 路径安全: ISSUE_NUMBER 必须纯数字, MEETING_DATE 必须 YYYY-MM-DD
@@ -88,7 +88,7 @@ def main() -> int:
     title = os.environ.get("MEETING_TITLE", "").strip() or "未命名会议"
     date = os.environ.get("MEETING_DATE", "").strip()
     if not date:
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        date = datetime.now(UTC).strftime("%Y-%m-%d")
 
     # 路径安全校验: 阻断 ../ 等穿越
     if not DATE_RE.fullmatch(date):
@@ -128,7 +128,7 @@ def main() -> int:
         date=date,
         issue_number=issue_num,
         feishu_url=feishu_url,
-        generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        generated_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         table=build_table(items),
     )
 

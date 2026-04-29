@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: scripts
+        working-directory: .
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -58,8 +58,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
       - run: pip install "ruff==0.6.9"
-      - run: ruff check --output-format=github .
-      - run: ruff format --check .
+      - run: ruff check --config meeting_bot/pyproject.toml --output-format=github scripts
+      - run: ruff format --config meeting_bot/pyproject.toml --check scripts
 
   typecheck:
     name: meeting_bot / Type Check (mypy)

@@ -22,7 +22,7 @@ import json
 import os
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
@@ -94,7 +94,7 @@ def create_bitable_record(
         try:
             dt = datetime.fromisoformat(due_date)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             fields["预计交付日期"] = int(dt.timestamp()) * 1000
         except ValueError:
             pass
@@ -102,7 +102,7 @@ def create_bitable_record(
         try:
             dt = datetime.fromisoformat(meeting_date)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             fields["提出日期"] = int(dt.timestamp()) * 1000
         except ValueError:
             pass
