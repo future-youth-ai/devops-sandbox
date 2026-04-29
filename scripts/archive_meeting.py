@@ -20,7 +20,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # 路径安全: ISSUE_NUMBER 必须纯数字, MEETING_DATE 必须 YYYY-MM-DD
@@ -72,15 +72,15 @@ def build_table(items: list[dict]) -> str:
     if not items:
         return "_(本次会议未提取到 action items)_"
     lines = [
-        "| # | 任务 | 负责人 | 截止 | 飞书 Task GUID |",
+        "| # | 任务 | 负责人 | 截止 | 飞书 Record ID |",
         "|---|---|---|---|---|",
     ]
     for i, it in enumerate(items, 1):
         title = _md_escape(it.get("title") or "")
         assignee = _md_escape(it.get("assignee_name") or "未指派")
         due = it.get("due_date") or "—"
-        guid = it.get("guid") or "(创建失败)"
-        lines.append(f"| {i} | {title} | {assignee} | {due} | `{guid}` |")
+        record_id = it.get("record_id") or "(创建失败)"
+        lines.append(f"| {i} | {title} | {assignee} | {due} | `{record_id}` |")
     return "\n".join(lines)
 
 
@@ -88,7 +88,7 @@ def main() -> int:
     title = os.environ.get("MEETING_TITLE", "").strip() or "未命名会议"
     date = os.environ.get("MEETING_DATE", "").strip()
     if not date:
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        date = datetime.now(UTC).strftime("%Y-%m-%d")
 
     # 路径安全校验: 阻断 ../ 等穿越
     if not DATE_RE.fullmatch(date):
@@ -128,7 +128,7 @@ def main() -> int:
         date=date,
         issue_number=issue_num,
         feishu_url=feishu_url,
-        generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        generated_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         table=build_table(items),
     )
 

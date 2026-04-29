@@ -29,6 +29,7 @@ TASK_RE = re.compile(r"\[(DONE-)?TASK-([A-Za-z0-9_-]+)\]")
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 TASKS_JSON = _REPO_ROOT / ".planning" / "tasks.json"
 
+
 def find_record_id(commit_id: str) -> str | None:
     """从 tasks.json 找匹配的真实 record_id.
 

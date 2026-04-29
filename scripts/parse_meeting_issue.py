@@ -43,9 +43,7 @@ def extract_field(body: str, label: str) -> str:
 
 def main() -> int:
     body = os.environ.get("ISSUE_BODY", "") or ""
-    fallback_title = (
-        os.environ.get("ISSUE_TITLE", "未命名").replace("[Meeting]", "").strip()
-    )
+    fallback_title = os.environ.get("ISSUE_TITLE", "未命名").replace("[Meeting]", "").strip()
 
     title = extract_field(body, "会议标题") or fallback_title
     date = extract_field(body, "会议日期 (YYYY-MM-DD)")

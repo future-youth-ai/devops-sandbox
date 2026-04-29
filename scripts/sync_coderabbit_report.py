@@ -54,6 +54,7 @@ PR_NUMBER_PATTERN = re.compile(r"^\d+$")
 
 # ---------- 过滤 ----------
 
+
 def should_skip(event: str, sender: str, body: str, state: str) -> tuple[bool, str]:
     """返回 (是否跳过, 原因或匹配类型)."""
     if event not in ALLOWED_EVENTS:
@@ -73,6 +74,7 @@ def should_skip(event: str, sender: str, body: str, state: str) -> tuple[bool, s
 
 
 # ---------- 校验 / 转义 ----------
+
 
 def validate_pr_url(url: str) -> str:
     """只允许 https://github.com/<owner>/<repo>/pull/<n> 精确格式.
@@ -96,11 +98,7 @@ def validate_pr_url(url: str) -> str:
     if p.query or p.fragment:
         return ""
     parts = [seg for seg in p.path.split("/") if seg]
-    if (
-        len(parts) != 4
-        or parts[2] != "pull"
-        or not parts[3].isdigit()
-    ):
+    if len(parts) != 4 or parts[2] != "pull" or not parts[3].isdigit():
         return ""
     owner, repo, _, number = parts
     return f"https://github.com/{owner}/{repo}/pull/{number}"
@@ -141,11 +139,7 @@ def sanitize_lark_body(text: str) -> str:
     """
     if not text:
         return ""
-    return (
-        text.replace("@", "＠")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    return text.replace("@", "＠").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def truncate_bytes(body: str, limit: int = MAX_BODY_BYTES) -> str:
@@ -169,6 +163,7 @@ def truncate_bytes(body: str, limit: int = MAX_BODY_BYTES) -> str:
 
 
 # ---------- 卡片 ----------
+
 
 def build_card(
     kind: str,
@@ -234,6 +229,7 @@ def build_card(
 
 
 # ---------- 主流程 ----------
+
 
 def main() -> int:
     event = os.environ.get("EVENT_NAME", "")

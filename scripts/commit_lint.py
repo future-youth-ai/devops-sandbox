@@ -21,17 +21,24 @@ import subprocess
 import sys
 
 # 交付物: [DEL-01] 或 [DEL-01][MVP] 或 [DEL-01][UAT] 等
-DELIVERABLE_PATTERN = re.compile(
-    r"^\[DEL-\d+\](?:\[[A-Z][A-Z0-9_-]*\])?\s+\S.*$"
-)
+DELIVERABLE_PATTERN = re.compile(r"^\[DEL-\d+\](?:\[[A-Z][A-Z0-9_-]*\])?\s+\S.*$")
 
 # 阶段: [PHASE-1] 描述
 PHASE_PATTERN = re.compile(r"^\[PHASE-\d+\]\s+\S.*$")
 
 # Conventional commits: feat: xxx / fix(scope): xxx
 CONVENTIONAL_TYPES = (
-    "feat", "fix", "docs", "style", "refactor",
-    "perf", "test", "chore", "build", "ci", "revert",
+    "feat",
+    "fix",
+    "docs",
+    "style",
+    "refactor",
+    "perf",
+    "test",
+    "chore",
+    "build",
+    "ci",
+    "revert",
 )
 CONVENTIONAL_PATTERN = re.compile(
     rf"^(?:{'|'.join(CONVENTIONAL_TYPES)})(?:\([\w\-./]+\))?!?:\s+\S.*$"

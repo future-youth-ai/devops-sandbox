@@ -71,7 +71,7 @@ logs/
 models/
 embeddings/
 
-# ---------- Data (meeting_bot SQLite dedup, ai_review local data) ----------
+# ---------- Data (meeting_bot SQLite dedup) ----------
 data/
 transcripts/
 *.sqlite

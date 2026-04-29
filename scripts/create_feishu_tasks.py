@@ -22,7 +22,7 @@ import json
 import os
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
@@ -35,7 +35,6 @@ from feishu_content import FEISHU_BASE, get_tenant_token
 # 锚定仓库根目录, 不依赖 cwd
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 TASKS_JSON_PATH = _REPO_ROOT / ".planning" / "tasks.json"
-
 
 
 def _build_session() -> requests.Session:
@@ -86,12 +85,16 @@ def create_bitable_record(
     if description:
         fields["备注"] = description
     if assignee_name:
-        fields["备注"] = f"[负责人: {assignee_name}] {description}" if description else f"[负责人: {assignee_name}]"
+        fields["备注"] = (
+            f"[负责人: {assignee_name}] {description}"
+            if description
+            else f"[负责人: {assignee_name}]"
+        )
     if due_date:
         try:
             dt = datetime.fromisoformat(due_date)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             fields["预计交付日期"] = int(dt.timestamp()) * 1000
         except ValueError:
             pass
@@ -99,7 +102,7 @@ def create_bitable_record(
         try:
             dt = datetime.fromisoformat(meeting_date)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             fields["提出日期"] = int(dt.timestamp()) * 1000
         except ValueError:
             pass
@@ -201,10 +204,10 @@ def main() -> int:
     repo_name = os.environ.get("REPO_NAME", "")
     issue_url = f"https://github.com/{repo_name}/issues/{issue_num}" if repo_name else ""
 
-    # 幂等: 检查已创建的记录, 按 title 去重
+    # 幂等: 检查已创建的记录, 按 title 跨 issue 去重
     mapping = load_tasks_map()
     key = f"issue#{issue_num}"
-    existing_titles = {e.get("title") for e in mapping.get(key, [])}
+    existing_titles = {e.get("title") for entries in mapping.values() for e in entries}
 
     created: list[dict] = []
     for item in items:
@@ -247,11 +250,14 @@ def main() -> int:
     gh_out = os.environ.get("GITHUB_OUTPUT")
     if gh_out:
         record_ids = " ".join(c["record_id"] for c in created)
-        md_lines = "\n".join(
-            f"- **{c['title']}** ({c['assignee_name'] or '未指派'}, "
-            f"{c['due_date'] or '无截止'}): `{c['record_id']}`"
-            for c in created
-        ) or "_(无)_"
+        md_lines = (
+            "\n".join(
+                f"- **{c['title']}** ({c['assignee_name'] or '未指派'}, "
+                f"{c['due_date'] or '无截止'}): `{c['record_id']}`"
+                for c in created
+            )
+            or "_(无)_"
+        )
         delim = f"TASK_MD_{uuid.uuid4().hex}"
         with open(gh_out, "a") as f:
             f.write(f"task_count={len(created)}\n")

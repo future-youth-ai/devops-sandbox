@@ -1,4 +1,5 @@
 """feishu_url 单测."""
+
 from __future__ import annotations
 
 import pytest

@@ -1,4 +1,5 @@
 """_blocks_to_text 单测 - 纯逻辑, 无外部依赖."""
+
 from __future__ import annotations
 
 from feishu_content import _blocks_to_text

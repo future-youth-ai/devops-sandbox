@@ -3,6 +3,7 @@
 
 根据环境变量判断事件类型:
   - push 到 main + commit message 含 [DEL-xx]/[PHASE-x]  -> 更新多维表格 + 群消息
+  - push 到 main + commit message 含 [TASK-]/[DONE-TASK-] -> 更新任务状态
   - pull_request 事件                                     -> 仅记录 PR 状态
 
 环境变量:
@@ -18,12 +19,12 @@
   [DEL-xx] 描述                 -> 交付物完成
   [DEL-xx][MVP|UAT|...] 描述    -> 里程碑达成 🏁
   [PHASE-x] 描述                -> 阶段完成 📦
+  [TASK-xxx] / [DONE-TASK-xxx]  -> 任务状态推进 (委托 update_feishu_task)
   其他 (feat:, fix: 等)         -> 不触发同步
 """
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import sys
@@ -40,14 +41,20 @@ DELIVERABLE_RE = re.compile(
     re.MULTILINE,
 )
 PHASE_RE = re.compile(r"^\[PHASE-(\d+)\]\s+(.+?)$", re.MULTILINE)
+TASK_RE = re.compile(r"\[(DONE-)?TASK-([A-Za-z0-9_-]+)\]")
 
 
 @dataclass
 class ParsedMessage:
-    kind: str  # "deliverable" | "milestone" | "phase" | "skip"
-    ident: str  # DEL-04 / PHASE-1
+    kind: str  # "deliverable" | "milestone" | "phase" | "task"
+    ident: str  # DEL-04 / PHASE-1 / TASK-xxx
     tag: str | None  # MVP / UAT / None
     description: str
+
+
+def _has_task_tag(message: str) -> bool:
+    """检查 commit message 是否含 [TASK-xxx] 或 [DONE-TASK-xxx]。"""
+    return bool(TASK_RE.search(message))
 
 
 def parse_commit(message: str) -> ParsedMessage | None:
@@ -66,6 +73,9 @@ def parse_commit(message: str) -> ParsedMessage | None:
     if m:
         num, desc = m.groups()
         return ParsedMessage(kind="phase", ident=f"PHASE-{num}", tag=None, description=desc)
+
+    if _has_task_tag(first_line):
+        return ParsedMessage(kind="task", ident="TASK", tag=None, description=first_line)
 
     return None
 
@@ -115,7 +125,9 @@ def update_bitable(
     print(f"✅ 多维表格已更新: {parsed.ident} {parsed.description}")
 
 
-def send_group_message(webhook: str, parsed: ParsedMessage, repo: str, actor: str, sha: str) -> None:
+def send_group_message(
+    webhook: str, parsed: ParsedMessage, repo: str, actor: str, sha: str
+) -> None:
     """向群机器人发送卡片消息。"""
     emoji_map = {"deliverable": "✅", "milestone": "🏁", "phase": "📦"}
     type_map = {"deliverable": "交付物完成", "milestone": "里程碑达成", "phase": "阶段完成"}
@@ -147,9 +159,18 @@ def send_group_message(webhook: str, parsed: ParsedMessage, repo: str, actor: st
                 {
                     "tag": "div",
                     "fields": [
-                        {"is_short": True, "text": {"tag": "lark_md", "content": f"**仓库**\n{repo}"}},
-                        {"is_short": True, "text": {"tag": "lark_md", "content": f"**提交人**\n{actor}"}},
-                        {"is_short": True, "text": {"tag": "lark_md", "content": f"**Commit**\n{sha[:8]}"}},
+                        {
+                            "is_short": True,
+                            "text": {"tag": "lark_md", "content": f"**仓库**\n{repo}"},
+                        },
+                        {
+                            "is_short": True,
+                            "text": {"tag": "lark_md", "content": f"**提交人**\n{actor}"},
+                        },
+                        {
+                            "is_short": True,
+                            "text": {"tag": "lark_md", "content": f"**Commit**\n{sha[:8]}"},
+                        },
                     ],
                 },
                 {
@@ -182,8 +203,14 @@ def handle_push() -> int:
 
     parsed = parse_commit(message)
     if parsed is None:
-        print("ℹ️ 普通提交 (未匹配 [DEL-xx] / [PHASE-x]), 跳过飞书同步")
+        print("ℹ️ 普通提交 (未匹配 [DEL-xx] / [PHASE-x] / [TASK-xxx]), 跳过飞书同步")
         return 0
+
+    # TASK 提交: 委托 update_feishu_task 处理状态推进
+    if parsed.kind == "task":
+        import update_feishu_task
+
+        return update_feishu_task.main()
 
     app_id = os.environ.get("FEISHU_APP_ID")
     app_secret = os.environ.get("FEISHU_APP_SECRET")

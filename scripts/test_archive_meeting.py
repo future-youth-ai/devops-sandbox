@@ -1,4 +1,5 @@
 """archive_meeting 单测."""
+
 from __future__ import annotations
 
 import json
@@ -14,8 +15,8 @@ def test_build_table_empty() -> None:
 def test_build_table_with_items() -> None:
     md = build_table(
         [
-            {"title": "登录", "assignee_name": "张三", "due_date": "2026-04-30", "guid": "g1"},
-            {"title": "文档", "assignee_name": "", "due_date": None, "guid": "g2"},
+            {"title": "登录", "assignee_name": "张三", "due_date": "2026-04-30", "record_id": "g1"},
+            {"title": "文档", "assignee_name": "", "due_date": None, "record_id": "g2"},
         ]
     )
     assert "| 1 | 登录 | 张三 | 2026-04-30 | `g1` |" in md
@@ -23,9 +24,7 @@ def test_build_table_with_items() -> None:
 
 
 def test_build_table_escapes_pipe() -> None:
-    md = build_table(
-        [{"title": "a|b", "assignee_name": "c|d", "due_date": None, "guid": "g"}]
-    )
+    md = build_table([{"title": "a|b", "assignee_name": "c|d", "due_date": None, "record_id": "g"}])
     assert "a\\|b" in md
     assert "c\\|d" in md
 
@@ -50,7 +49,7 @@ def test_main_writes_file(tmp_path, monkeypatch, capsys) -> None:
                         "title": "测试任务",
                         "assignee_name": "张三",
                         "due_date": "2026-05-01",
-                        "guid": "g-1",
+                        "record_id": "g-1",
                     }
                 ]
             }
@@ -118,7 +117,7 @@ def test_main_handles_dirty_tasks_json(tmp_path, monkeypatch) -> None:
             {
                 "issue#1": "not a list",  # 错: 应该是 list
                 "issue#2": [
-                    {"title": "ok", "guid": "g1", "assignee_name": "x", "due_date": None},
+                    {"title": "ok", "record_id": "g1", "assignee_name": "x", "due_date": None},
                     "not a dict",  # 错: list 内有非 dict
                 ],
             }

@@ -1,8 +1,8 @@
 """parse_meeting_issue 单测."""
+
 from __future__ import annotations
 
 from parse_meeting_issue import extract_field
-
 
 SAMPLE_BODY = """### 会议标题
 
