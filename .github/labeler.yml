@@ -1,11 +1,6 @@
 # 按路径自动给 PR 打标签 - monorepo 模式
 
 # ---------- 项目标签 (一级分类) ----------
-"project/ai_review":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "ai_review/**"
-
 "project/meeting_bot":
   - changed-files:
       - any-glob-to-any-file:
@@ -43,18 +38,6 @@
       - any-glob-to-any-file:
           - "meeting_bot/Dockerfile"
           - "meeting_bot/docker-compose.yml"
-
-"area/rag":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "ai_review/src/rag/**"
-          - "ai_review/src/retrieval/**"
-
-"area/review-engine":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "ai_review/src/review/**"
-          - "ai_review/src/engine/**"
 
 "area/tests":
   - changed-files:

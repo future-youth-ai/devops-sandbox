@@ -1,12 +1,12 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
-# devops-sandbox monorepo - 两个子项目的审查规则合并
+# devops-sandbox monorepo
 
 language: zh-CN
 early_access: false
 tone_instructions: |
-  你是一位资深的 Python 后端 / AI 工程审查员, 熟悉政府项目合规要求和飞书开放平台。
+  你是一位资深的 Python 后端工程审查员, 熟悉飞书开放平台。
   审查意见使用中文, 语气专业、直接、可执行。
-  优先级: 安全漏洞 > 数据合规 > 异步正确性 > RAG 管道 / 飞书 API > 性能 > 代码风格。
+  优先级: 安全漏洞 > 数据合规 > 异步正确性 > 飞书 API > 性能 > 代码风格。
   给出具体的代码修改建议, 而不是抽象描述。
 
 reviews:
@@ -42,55 +42,8 @@ reviews:
            SSRF、路径穿越 (open()/Path() 未校验)、不安全反序列化 (pickle/yaml.load)。
         2. 硬编码凭证: 搜索 api_key/secret/token/password 常量赋值;
            检查是否有真实 Key 被写入代码 (应使用 os.environ / pydantic-settings SecretStr)。
-        3. 政府数据合规:
-           - 用户数据查询必须有租户/部门隔离 (where tenant_id=?)
-           - 敏感字段 (身份证、手机号、公文编号) 记日志前必须脱敏
-           - 权限检查必须在视图层或 service 层显式调用
-        4. 输入校验: 所有外部输入必须经过 Pydantic 模型或显式校验
+        3. 输入校验: 所有外部输入必须经过 Pydantic 模型或显式校验
            才能进入 SQL、shell、LLM prompt、飞书 API。
-
-    # ========== ai_review 子项目 ==========
-    - path: "ai_review/src/rag/**"
-      instructions: |
-        【RAG 管道质量】
-        1. Embedding 维度匹配: 向量写入/检索的 dim 必须与模型输出一致;
-           chunker 产出的 chunk 必须在模型 max_tokens 以内。
-        2. Reranker 保护: 所有外部模型调用必须有 timeout 和 retry 策略;
-           失败必须降级到不 rerank 而不是抛异常崩溃整个检索。
-        3. Prompt 注入防护:
-           - 用户输入不得直接拼接到 system prompt
-           - 从文档解析出的内容必须明确标记为 context 而非指令
-           - 检查是否有 "ignore previous instructions" 类过滤
-        4. Chunk 策略: overlap 合理 (10-20%), 避免跨段落切分破坏语义。
-        5. 向量数据库: 查询必须带 top_k 上限, 避免全库扫描。
-
-    - path: "ai_review/src/parsers/**"
-      instructions: |
-        【文档解析器】
-        1. 大文件防御: PDF/Word 超过 100MB 必须分块处理, 禁止一次性加载。
-        2. 恶意文档: 检查 XXE (lxml resolve_entities=False)、ZIP 炸弹、宏代码检测。
-        3. 内存控制: 使用生成器/流式 API, 避免 list 累积所有页面。
-        4. 表格/OCR 错误必须有 fallback, 不能因一页损坏导致整文档失败。
-
-    - path: "ai_review/src/review/**"
-      instructions: |
-        【审核业务逻辑】
-        1. 状态机完整性: pending → reviewing → approved/rejected
-           所有状态转移必须显式列出, 禁止隐式跳转。
-        2. 三重防幻觉:
-           - LLM 输出必须经过 citation 校验 (引用必须来自 retrieved context)
-           - 关键结论必须有 self-consistency 或 critic 模型复核
-           - 最终结果必须可追溯到原文 (offset/页码)
-        3. 法规条款匹配: 条款 ID 必须精确匹配, 禁止模糊字符串 in 判断。
-        4. 幂等性: 审核任务重试必须幂等, 使用 task_id + version 去重。
-
-    - path: "ai_review/src/api/**"
-      instructions: |
-        【API 层】
-        1. 所有路由必须有 pydantic request/response 模型。
-        2. 权限装饰器不得遗漏 (Depends(require_xxx))。
-        3. 速率限制 (rate limit) 配置合理。
-        4. 错误响应禁止泄露内部栈信息。
 
     # ========== meeting_bot 子项目 ==========
     - path: "meeting_bot/src/meeting_bot/feishu/**"

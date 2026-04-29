@@ -12,7 +12,6 @@
 
 ## 📦 影响的项目
 
-- [ ] `ai_review/` — AI 审核系统
 - [ ] `meeting_bot/` — 飞书会议 bot
 - [ ] `scripts/` — 仓库级工具
 - [ ] `.github/` — CI / 仓库配置

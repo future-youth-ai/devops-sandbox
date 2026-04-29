@@ -104,7 +104,7 @@ docker compose up -d --build
 
 ## CI (7 项 + Docker)
 
-与 `ai_review_project_init` 一致的 8 项检查, 加一项 Docker build smoke test:
+8 项 CI 检查:
 
 | # | 检查 | 说明 |
 |---|------|------|
