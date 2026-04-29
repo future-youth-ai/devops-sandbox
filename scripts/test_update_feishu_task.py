@@ -1,4 +1,5 @@
 """update_feishu_task 单测."""
+
 from __future__ import annotations
 
 import json
@@ -30,9 +31,7 @@ def test_done_tag_calls_patch(monkeypatch, tmp_path) -> None:
     tasks_json = tmp_path / ".planning" / "tasks.json"
     monkeypatch.setattr(update_feishu_task, "TASKS_JSON", tasks_json)
     tasks_json.parent.mkdir(parents=True)
-    tasks_json.write_text(
-        json.dumps({"issue#1": [{"guid": "g-abc12345-full", "title": "x"}]})
-    )
+    tasks_json.write_text(json.dumps({"issue#1": [{"guid": "g-abc12345-full", "title": "x"}]}))
 
     responses.add(
         responses.POST,
@@ -59,9 +58,7 @@ def test_unknown_task_warns_no_call(monkeypatch, tmp_path) -> None:
     tasks_json = tmp_path / ".planning" / "tasks.json"
     monkeypatch.setattr(update_feishu_task, "TASKS_JSON", tasks_json)
     tasks_json.parent.mkdir(parents=True)
-    tasks_json.write_text(
-        json.dumps({"issue#1": [{"guid": "g-real", "title": "x"}]})
-    )
+    tasks_json.write_text(json.dumps({"issue#1": [{"guid": "g-real", "title": "x"}]}))
 
     responses.add(
         responses.POST,
@@ -84,9 +81,7 @@ def test_non_done_tag_does_not_patch(monkeypatch, tmp_path) -> None:
     tasks_json = tmp_path / ".planning" / "tasks.json"
     monkeypatch.setattr(update_feishu_task, "TASKS_JSON", tasks_json)
     tasks_json.parent.mkdir(parents=True)
-    tasks_json.write_text(
-        json.dumps({"issue#1": [{"guid": "g-abc", "title": "x"}]})
-    )
+    tasks_json.write_text(json.dumps({"issue#1": [{"guid": "g-abc", "title": "x"}]}))
 
     responses.add(
         responses.POST,

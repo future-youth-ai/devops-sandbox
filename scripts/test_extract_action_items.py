@@ -1,4 +1,5 @@
 """extract_action_items 单测 - mock OpenAI 客户端."""
+
 from __future__ import annotations
 
 import json

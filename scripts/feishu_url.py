@@ -49,9 +49,7 @@ def parse_feishu_url(url: str) -> tuple[str, str]:
 
     kind, token = parts[0], parts[1]
     if kind not in ALLOWED_KINDS:
-        raise InvalidFeishuURL(
-            f"未支持的资源类型 {kind!r}, 仅支持 {sorted(ALLOWED_KINDS)}"
-        )
+        raise InvalidFeishuURL(f"未支持的资源类型 {kind!r}, 仅支持 {sorted(ALLOWED_KINDS)}")
     if not token or len(token) < 8:
         raise InvalidFeishuURL(f"token 长度异常 (需 >=8): {token}")
     return kind, token

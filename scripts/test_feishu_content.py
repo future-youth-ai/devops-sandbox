@@ -1,4 +1,5 @@
 """feishu_content 单测 - 用 responses 库 mock HTTP."""
+
 from __future__ import annotations
 
 import pytest
@@ -66,9 +67,7 @@ def test_fetch_docx_text_blocks() -> None:
                 "items": [
                     {
                         "block_type": 3,  # heading 1
-                        "heading1": {
-                            "elements": [{"text_run": {"content": "标题一"}}]
-                        },
+                        "heading1": {"elements": [{"text_run": {"content": "标题一"}}]},
                     },
                     {
                         "block_type": 2,

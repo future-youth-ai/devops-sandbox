@@ -1,4 +1,5 @@
 """commit_lint 单测."""
+
 from __future__ import annotations
 
 from commit_lint import validate_subject

@@ -59,14 +59,19 @@ devops-sandbox/
 
 ## 🔄 CI / 自动化
 
-### GitHub Actions 工作流
+### CI 工作流（分支保护 gate）
 
 | 工作流 | 触发条件 | 用途 |
 |--------|---------|------|
-| `meeting-bot-ci.yml` | PR 触及 `meeting_bot/**` | Ruff / mypy / pytest / Bandit / pip-audit / Docker build / TruffleHog |
+| `meeting-bot-ci.yml` | PR 触及 `meeting_bot/**` 或 `scripts/**` | Ruff / mypy / pytest / Bandit / pip-audit / Docker build |
 | `commit-lint.yml` | PR on main/dev | 校验 commit 消息格式 |
-| `labeler.yml` | PR opened/synced | 按路径自动打标签 |
 | `secret-scan.yml` | 所有 push/PR | TruffleHog 凭证扫描 |
+
+### 审查 / 通知自动化
+
+| 工作流 | 触发条件 | 用途 |
+|--------|---------|------|
+| `labeler.yml` | PR opened/synced | 按路径自动打标签 |
 | `feishu-sync.yml` | push to main | 同步 `[DEL-]`/`[PHASE-]`/`[TASK-]` 到飞书 Bitable + 群 webhook |
 | `coderabbit-report-sync.yml` | CodeRabbit 评论 | 转发 AI 审查报告到飞书群 |
 | `process-meeting.yml` | issue 打 `meeting` 标签 | 解析 → 拉转写 → LLM 提取行动项 → 创建任务 → 归档 |

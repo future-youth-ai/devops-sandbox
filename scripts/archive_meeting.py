@@ -72,15 +72,15 @@ def build_table(items: list[dict]) -> str:
     if not items:
         return "_(本次会议未提取到 action items)_"
     lines = [
-        "| # | 任务 | 负责人 | 截止 | 飞书 Task GUID |",
+        "| # | 任务 | 负责人 | 截止 | 飞书 Record ID |",
         "|---|---|---|---|---|",
     ]
     for i, it in enumerate(items, 1):
         title = _md_escape(it.get("title") or "")
         assignee = _md_escape(it.get("assignee_name") or "未指派")
         due = it.get("due_date") or "—"
-        guid = it.get("guid") or "(创建失败)"
-        lines.append(f"| {i} | {title} | {assignee} | {due} | `{guid}` |")
+        record_id = it.get("record_id") or "(创建失败)"
+        lines.append(f"| {i} | {title} | {assignee} | {due} | `{record_id}` |")
     return "\n".join(lines)
 
 

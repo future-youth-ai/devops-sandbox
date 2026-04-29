@@ -23,7 +23,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import sys
@@ -115,7 +114,9 @@ def update_bitable(
     print(f"✅ 多维表格已更新: {parsed.ident} {parsed.description}")
 
 
-def send_group_message(webhook: str, parsed: ParsedMessage, repo: str, actor: str, sha: str) -> None:
+def send_group_message(
+    webhook: str, parsed: ParsedMessage, repo: str, actor: str, sha: str
+) -> None:
     """向群机器人发送卡片消息。"""
     emoji_map = {"deliverable": "✅", "milestone": "🏁", "phase": "📦"}
     type_map = {"deliverable": "交付物完成", "milestone": "里程碑达成", "phase": "阶段完成"}
@@ -147,9 +148,18 @@ def send_group_message(webhook: str, parsed: ParsedMessage, repo: str, actor: st
                 {
                     "tag": "div",
                     "fields": [
-                        {"is_short": True, "text": {"tag": "lark_md", "content": f"**仓库**\n{repo}"}},
-                        {"is_short": True, "text": {"tag": "lark_md", "content": f"**提交人**\n{actor}"}},
-                        {"is_short": True, "text": {"tag": "lark_md", "content": f"**Commit**\n{sha[:8]}"}},
+                        {
+                            "is_short": True,
+                            "text": {"tag": "lark_md", "content": f"**仓库**\n{repo}"},
+                        },
+                        {
+                            "is_short": True,
+                            "text": {"tag": "lark_md", "content": f"**提交人**\n{actor}"},
+                        },
+                        {
+                            "is_short": True,
+                            "text": {"tag": "lark_md", "content": f"**Commit**\n{sha[:8]}"},
+                        },
                     ],
                 },
                 {
